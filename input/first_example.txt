@@ -1,0 +1,20 @@
+# Round-Robin Scheduler Simulation — Example Input
+# ===================================================
+# Format:
+#   [params]  key = value
+#   [processes]  release_time  memory  b0 s0 b1 s1 b2 ... bN
+
+[params]
+num_processors     = 2
+ram_size           = 160        # MB total RAM
+time_slice         = 4
+sys_proc_period    = 20
+sys_proc_duration  = 2
+disk_transfer_rate = 50         # MB per time unit
+
+[processes]
+# release  mem   burst syscall burst syscall burst syscall burst
+# Example from spec: sequence (5 2 3 4 9 4 6) = 4 bursts, 3 syscalls
+0    64    5 2 3 4 9 4 6
+2    64    8 1 4 3 6
+8    96    3 2 7
