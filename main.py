@@ -47,12 +47,12 @@ def main():
     sim = Simulator(params, processes)
     log, gantt = sim.run()
 
-    print(f"[*] Writing text report → {out_text}")
+    print(f"[*] Writing text report -> {out_text}")
     report = build_text_report(log, gantt, params, processes)
-    with open(out_text, 'w') as fh:
+    with open(out_text, 'w', encoding='utf-8') as fh:
         fh.write(report)
 
-    print(f"[*] Writing HTML visualisation → {out_html}")
+    print(f"[*] Writing HTML visualisation -> {out_html}")
     generate_html(log, gantt, params, processes, out_html)
 
     print(f"[*] Done.  {len(log)} log entries, {len(gantt)} Gantt intervals.")

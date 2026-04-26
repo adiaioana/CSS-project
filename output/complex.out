@@ -1,0 +1,88 @@
+========================================================================
+  ROUND-ROBIN SCHEDULER SIMULATION — EXECUTION LOG
+========================================================================
+  Processors      : 3
+  RAM             : 512 MB
+  Time slice      : 4.0
+  SysProc period  : 20.0
+  SysProc duration: 2.0
+  Disk xfer rate  : 50.0 MB/t
+
+  PROCESSES
+  ------------------------------------------------------------
+  P0: release=0.0  mem=128MB  bursts=[12.0, 5.0, 8.0, 4.0]  syscalls=[3.0, 2.0, 1.0]
+  P1: release=2.0  mem=256MB  bursts=[5.0, 8.0, 6.0]  syscalls=[2.0, 4.0]
+
+  EVENT LOG
+  ------------------------------------------------------------
+  [t=    0.00] SYS    P0 | RELEASED                mem=128MB
+  [t=    0.00] CPU0   P0 | DISPATCH               dur=4.0  burst_rem=12.00 slice=4.0
+  [t=    2.00] SYS    P1 | RELEASED                mem=256MB
+  [t=    2.00] CPU1   P1 | DISPATCH               dur=4.0  burst_rem=5.00 slice=4.0
+  [t=    4.00] CPU0   P0 | SLICE_EXPIRE            burst_rem=8.00
+  [t=    4.00] CPU0   P0 | DISPATCH               dur=4.0  burst_rem=8.00 slice=4.0
+  [t=    6.00] CPU1   P1 | SLICE_EXPIRE            burst_rem=1.00
+  [t=    6.00] CPU1   P1 | DISPATCH               dur=1.0  burst_rem=1.00 slice=4.0
+  [t=    7.00] CPU1   P1 | SYSCALL_ISSUED         dur=2.0  syscall #1
+  [t=    7.00] CPU1  SYS | SYS_PROC_START         dur=2.0  handling 1 syscall(s)
+  [t=    8.00] CPU0   P0 | SLICE_EXPIRE            burst_rem=4.00
+  [t=    8.00] CPU0   P0 | DISPATCH               dur=4.0  burst_rem=4.00 slice=4.0
+  [t=    9.00] CPU1  SYS | SYS_PROC_END            completed 1 syscall(s)
+  [t=    9.00] SYS    P1 | SYSCALL_COMPLETE        burst_index now 1
+  [t=    9.00] CPU1   P1 | DISPATCH               dur=4.0  burst_rem=8.00 slice=4.0
+  [t=   12.00] CPU0   P0 | SYSCALL_ISSUED         dur=3.0  syscall #1
+  [t=   12.00] CPU0  SYS | SYS_PROC_START         dur=3.0  handling 1 syscall(s)
+  [t=   13.00] CPU1   P1 | SLICE_EXPIRE            burst_rem=4.00
+  [t=   13.00] CPU1   P1 | DISPATCH               dur=4.0  burst_rem=4.00 slice=4.0
+  [t=   15.00] CPU0  SYS | SYS_PROC_END            completed 1 syscall(s)
+  [t=   15.00] SYS    P0 | SYSCALL_COMPLETE        burst_index now 1
+  [t=   15.00] CPU0   P0 | DISPATCH               dur=4.0  burst_rem=5.00 slice=4.0
+  [t=   17.00] CPU1   P1 | SYSCALL_ISSUED         dur=4.0  syscall #2
+  [t=   17.00] CPU1  SYS | SYS_PROC_START         dur=4.0  handling 1 syscall(s)
+  [t=   19.00] CPU0   P0 | SLICE_EXPIRE            burst_rem=1.00
+  [t=   19.00] CPU0   P0 | DISPATCH               dur=1.0  burst_rem=1.00 slice=4.0
+  [t=   20.00] CPU0   P0 | SYSCALL_ISSUED         dur=2.0  syscall #2
+  [t=   20.00] SYS   SYS | SYS_PROC_RELEASED       period=20.0
+  [t=   21.00] CPU1  SYS | SYS_PROC_END            completed 1 syscall(s)
+  [t=   21.00] SYS    P1 | SYSCALL_COMPLETE        burst_index now 2
+  [t=   21.00] CPU1   P1 | DISPATCH               dur=4.0  burst_rem=6.00 slice=4.0
+  [t=   21.00] CPU0  SYS | SYS_PROC_START         dur=2.0  handling 1 syscall(s)
+  [t=   23.00] CPU0  SYS | SYS_PROC_END            completed 1 syscall(s)
+  [t=   23.00] SYS    P0 | SYSCALL_COMPLETE        burst_index now 2
+  [t=   23.00] CPU0   P0 | DISPATCH               dur=4.0  burst_rem=8.00 slice=4.0
+  [t=   25.00] CPU1   P1 | SLICE_EXPIRE            burst_rem=2.00
+  [t=   25.00] CPU1   P1 | DISPATCH               dur=2.0  burst_rem=2.00 slice=4.0
+  [t=   27.00] CPU1   P1 | FINISHED                t=27.00
+  [t=   27.00] SYS    P1 | RAM_FREED               process finished, freed 256MB
+  [t=   27.00] CPU0   P0 | SLICE_EXPIRE            burst_rem=4.00
+  [t=   27.00] CPU0   P0 | DISPATCH               dur=4.0  burst_rem=4.00 slice=4.0
+  [t=   31.00] CPU0   P0 | SYSCALL_ISSUED         dur=1.0  syscall #3
+  [t=   31.00] CPU0  SYS | SYS_PROC_START         dur=1.0  handling 1 syscall(s)
+  [t=   32.00] CPU0  SYS | SYS_PROC_END            completed 1 syscall(s)
+  [t=   32.00] SYS    P0 | SYSCALL_COMPLETE        burst_index now 3
+  [t=   32.00] CPU0   P0 | DISPATCH               dur=4.0  burst_rem=4.00 slice=4.0
+  [t=   36.00] CPU0   P0 | FINISHED                t=36.00
+  [t=   36.00] SYS    P0 | RAM_FREED               process finished, freed 128MB
+
+  GANTT INTERVALS
+  ------------------------------------------------------------
+  [    0.00 –     4.00]  CPU0    P0     user
+  [    2.00 –     6.00]  CPU1    P1     user
+  [    4.00 –     8.00]  CPU0    P0     user
+  [    6.00 –     7.00]  CPU1    P1     user
+  [    7.00 –     9.00]  CPU1    PSYS   sys_proc
+  [    8.00 –    12.00]  CPU0    P0     user
+  [    9.00 –    13.00]  CPU1    P1     user
+  [   12.00 –    15.00]  CPU0    PSYS   sys_proc
+  [   13.00 –    17.00]  CPU1    P1     user
+  [   15.00 –    19.00]  CPU0    P0     user
+  [   17.00 –    21.00]  CPU1    PSYS   sys_proc
+  [   19.00 –    20.00]  CPU0    P0     user
+  [   21.00 –    23.00]  CPU0    PSYS   sys_proc
+  [   21.00 –    25.00]  CPU1    P1     user
+  [   23.00 –    27.00]  CPU0    P0     user
+  [   25.00 –    27.00]  CPU1    P1     user
+  [   27.00 –    31.00]  CPU0    P0     user
+  [   31.00 –    32.00]  CPU0    PSYS   sys_proc
+  [   32.00 –    36.00]  CPU0    P0     user
+========================================================================

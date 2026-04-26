@@ -1,0 +1,14 @@
+[params]
+num_processors    = 3
+ram_size          = 512
+time_slice        = 4
+sys_proc_period   = 20
+sys_proc_duration = 2
+disk_transfer_rate = 50
+
+[processes]
+# release_time  memory  burst0 syscall0 burst1 syscall1 burst2 ...
+# P0: Sosire devreme
+0   128  12 3 5 2 8 1 4
+# P1: Memorie multa, va bloca mult timp un core
+2   256  5 2 8 4 6
