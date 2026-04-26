@@ -58,9 +58,9 @@ def generate_html(log, gantt, params, processes, output_path):
     # SVG dimensions
     MARGIN_LEFT  = 80
     MARGIN_TOP   = 60
-    LANE_H       = 44
-    LANE_GAP     = 8
-    BAR_H        = 30
+    LANE_H       = 68
+    LANE_GAP     = 12
+    BAR_H        = 48
     BAR_OFFSET_Y = (LANE_H - BAR_H) // 2
     TICK_STEP    = max(1, int(t_max / 30))   # ~30 ticks max
 
@@ -294,6 +294,23 @@ def generate_html(log, gantt, params, processes, output_path):
             text-align: center; color: var(--muted); font-size: .75rem;
             font-family: var(--mono); letter-spacing: .04em; }}
 
+  /* Gantt zoom controls */
+  .gantt-controls {{
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }}
+  .gantt-controls button {{
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--mono); font-size: .82rem; padding: 4px 12px;
+    border-radius: 5px; cursor: pointer; transition: background .15s;
+  }}
+  .gantt-controls button:hover {{ background: #2a2a5a; }}
+  .gantt-controls button:disabled {{ opacity: .35; cursor: default; }}
+  .zoom-label {{
+    font-family: var(--mono); font-size: .78rem; color: var(--accent);
+    min-width: 44px; text-align: center;
+  }}
+  .zoom-hint {{ font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-left: 6px; }}
+
   /* Gantt bar hover */
   .gantt-bar {{ cursor: default; transition: opacity .12s, filter .12s; }}
   .gantt-bar:hover {{ opacity: 1 !important; filter: brightness(1.18); }}
@@ -337,6 +354,13 @@ def generate_html(log, gantt, params, processes, output_path):
 </div>
 
 <h2>Gantt Chart</h2>
+<div class="gantt-controls">
+  <button id="zoom-out" onclick="zoomGantt(-1)">&#8722;</button>
+  <span class="zoom-label" id="zoom-label">100%</span>
+  <button id="zoom-in"  onclick="zoomGantt(+1)">&#43;</button>
+  <button onclick="resetGantt()">Reset</button>
+  <span class="zoom-hint">zoom in to see details &mdash; scroll appears automatically</span>
+</div>
 <div class="gantt-wrapper">
 {gantt_svg}
 </div>
@@ -362,6 +386,30 @@ def generate_html(log, gantt, params, processes, output_path):
 
 <script>
 (function() {{
+  // Gantt zoom
+  var ZOOMS = [100, 150, 200, 300, 400, 600];
+  var zIdx  = 0;
+  var svg   = document.querySelector('.gantt-wrapper svg');
+
+  function applyZoom() {{
+    var z = ZOOMS[zIdx];
+    svg.style.width = z + '%';
+    document.getElementById('zoom-label').textContent = z + '%';
+    document.getElementById('zoom-out').disabled = (zIdx === 0);
+    document.getElementById('zoom-in').disabled  = (zIdx === ZOOMS.length - 1);
+  }}
+
+  window.zoomGantt = function(dir) {{
+    zIdx = Math.max(0, Math.min(ZOOMS.length - 1, zIdx + dir));
+    applyZoom();
+  }};
+  window.resetGantt = function() {{
+    zIdx = 0;
+    applyZoom();
+  }};
+  applyZoom();
+
+  // Tooltip
   var tip = document.getElementById('gantt-tip');
   document.querySelectorAll('.gantt-bar').forEach(function(bar) {{
     bar.addEventListener('mousemove', function(e) {{
@@ -385,5 +433,5 @@ def generate_html(log, gantt, params, processes, output_path):
 </body>
 </html>"""
 
-    with open(output_path, 'w') as fh:
+    with open(output_path, 'w', encoding='utf-8') as fh:
         fh.write(html)

@@ -1,0 +1,13 @@
+[params]
+num_processors    = 1
+ram_size          = 200
+time_slice        = 3
+sys_proc_period   = 100
+sys_proc_duration = 1
+disk_transfer_rate = 20
+
+[processes]
+0   100   20
+1   100   20
+5   100   20
+15  100   20

@@ -7,8 +7,11 @@ sys_proc_duration = 2
 disk_transfer_rate = 50
 
 [processes]
-# release_time  memory  burst0 syscall0 burst1 syscall1 burst2 ...
-# P0: Sosire devreme
 0   128  12 3 5 2 8 1 4
-# P1: Memorie multa, va bloca mult timp un core
 2   256  5 2 8 4 6
+5   200  10 2 5 1 5
+8   64   4 1 4 1 4
+15  350  20 5 10
+20  100  2 1 2 1 2 1 2 1 2
+25  256  30
+35  128  8 2 8 2 8
