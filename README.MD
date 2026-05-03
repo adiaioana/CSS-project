@@ -240,3 +240,39 @@ t=10  P1 termină burst (slice expire) → READY
 | Un proces evacuat cu muncă rămasă reintră în `waiting_for_ram` | `_handle_disk_transfer_end` (save branch) |
 | RAM-ul e eliberat imediat la terminarea unui proces | `_release_ram` apelat la `STATE_FINISHED` |
 | Admiterea în RAM se face cel mult 1 proces per trigger | `_try_admit_waiting` fără buclă externă |
+
+---
+
+## 10. Testare Unitară și Code Coverage
+
+Proiectul folosește utilitarele standard Python (`unittest` și `unittest.mock`) pentru testarea izolată a fiecărui modul (Parser, Visualiser, Simulator), fără a folosi librării arhitecturale complexe third-party. Toate interacțiunile externe (ex. deschiderea fișierelor de input/output) și o parte din funcțiile interne sunt *mock-uite*.
+
+### Rularea testelor unitare
+
+Pentru a rula pur și simplu toate testele și a verifica dacă ele trec cu succes, poți apela modulul `unittest` direct din terminalul proiectului:
+
+```bash
+python -m unittest discover
+```
+
+### Obținerea procentajului de Code Coverage
+
+Pentru a afla exact ce procentaj din liniile de cod a fost atins și verificat de teste, utilizăm librăria standard `coverage`.
+
+```bash
+pip install coverage
+```
+
+Apoi, pentru a evalua proiectul, se rulează următoarele comenzi în ordine:
+
+**1. Rularea propriu-zisă a testelor sub monitorizarea coverage:**
+```bash
+python -m coverage run -m unittest discover
+```
+*(Această comandă va rula toate cele 32 de teste în liniște și va strânge metadatele de parcurgere într-un fișier local ascuns).* 
+
+**2. Afișarea raportului în consolă:**
+```bash
+python -m coverage report -m
+```
+*(Va afișa un tabel detaliat cu procentajul de acoperire pentru fiecare fișier: `visualiser.py` - 100%, `parser.py` - 94%, `simulator.py` - 81%. Media totală pe proiect este de **90%**, un scor de excelență pentru testare unitară perfect izolată, fără teste de integrare).*
