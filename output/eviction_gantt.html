@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Scheduler Simulation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;600;800&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:     #0d0d1a;
+    --bg2:    #12122a;
+    --bg3:    #1a1a3a;
+    --accent: #4A9EFF;
+    --orange: #FF6B35;
+    --text:   #c8d8f0;
+    --muted:  #556688;
+    --border: #2a2a4a;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: 'Exo 2', sans-serif; }
+  body { padding: 32px; }
+
+  h1 { font-size: 2rem; font-weight: 800; letter-spacing: .08em;
+        background: linear-gradient(90deg, var(--accent), var(--orange));
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-family: 'Share Tech Mono', monospace;
+               font-size: .85rem; margin-bottom: 32px; letter-spacing: .05em; }
+
+  .params-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px; margin-bottom: 40px;
+  }
+  .param-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 18px;
+  }
+  .param-card .label { font-size: .7rem; color: var(--muted); text-transform: uppercase;
+                        letter-spacing: .1em; font-family: 'Share Tech Mono', monospace; }
+  .param-card .value { font-size: 1.4rem; font-weight: 600; color: var(--accent); margin-top: 4px; }
+
+  h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: .06em;
+        color: var(--accent); text-transform: uppercase;
+        border-left: 3px solid var(--orange); padding-left: 12px;
+        margin: 36px 0 16px; }
+
+  .gantt-wrapper {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; overflow-x: auto; padding: 16px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem;
+           font-family: 'Share Tech Mono', monospace; }
+  thead tr { background: var(--bg3); }
+  th { padding: 10px 14px; text-align: left; color: var(--muted);
+        text-transform: uppercase; font-size: .7rem; letter-spacing: .1em;
+        border-bottom: 1px solid var(--border); }
+  td { padding: 8px 14px; border-bottom: 1px solid #1e1e36; color: var(--text); }
+  tr:hover td { background: #1e1e3a; }
+  .table-wrapper { max-height: 480px; overflow-y: auto;
+                    border: 1px solid var(--border); border-radius: 8px; }
+
+  footer { margin-top: 48px; text-align: center; color: var(--muted);
+            font-size: .75rem; font-family: 'Share Tech Mono', monospace; }
+</style>
+</head>
+<body>
+
+<h1>Scheduler Simulation</h1>
+<p class="subtitle">Preemptive Round-Robin · Virtual Memory (LRU) · Periodic System Process</p>
+
+<div class="params-grid">
+  <div class="param-card"><div class="label">Processors</div><div class="value">1</div></div>
+  <div class="param-card"><div class="label">RAM</div><div class="value">200 MB</div></div>
+  <div class="param-card"><div class="label">Time Slice</div><div class="value">3.0</div></div>
+  <div class="param-card"><div class="label">SysProc Period</div><div class="value">100.0</div></div>
+  <div class="param-card"><div class="label">SysProc Duration</div><div class="value">1.0</div></div>
+  <div class="param-card"><div class="label">Disk Rate</div><div class="value">20.0 MB/t</div></div>
+</div>
+
+<h2>Processes</h2>
+<div class="table-wrapper">
+<table>
+  <thead><tr><th>PID</th><th>Release</th><th>Memory</th><th>Bursts</th><th>Syscalls</th><th>Final State</th></tr></thead>
+  <tbody><tr><td>P0</td><td>0.0</td><td>100 MB</td><td>[20.0]</td><td>[]</td><td style="color:#4A9EFF">FINISHED</td></tr>
+<tr><td>P1</td><td>1.0</td><td>100 MB</td><td>[20.0]</td><td>[]</td><td style="color:#4A9EFF">FINISHED</td></tr>
+<tr><td>P2</td><td>5.0</td><td>100 MB</td><td>[20.0]</td><td>[]</td><td style="color:#4A9EFF">FINISHED</td></tr>
+<tr><td>P3</td><td>15.0</td><td>100 MB</td><td>[20.0]</td><td>[]</td><td style="color:#4A9EFF">FINISHED</td></tr></tbody>
+</table>
+</div>
+
+<h2>Gantt Chart</h2>
+<div class="gantt-wrapper">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="224" style="font-family:'Courier New',monospace;background:#1a1a2e;">
+<rect x="80" y="60" width="1100" height="44" fill="#12122a" rx="4"/>
+<text x="74" y="87" text-anchor="end" fill="#8899bb" font-size="12">CPU0</text>
+<rect x="80" y="112" width="1100" height="44" fill="#12122a" rx="4"/>
+<text x="74" y="139" text-anchor="end" fill="#8899bb" font-size="12">DISK</text>
+<line x1="80.0" y1="52" x2="80.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="80.0" y="48" text-anchor="middle" fill="#556688" font-size="10">0</text>
+<line x1="135.0" y1="52" x2="135.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="135.0" y="48" text-anchor="middle" fill="#556688" font-size="10">4</text>
+<line x1="190.0" y1="52" x2="190.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="190.0" y="48" text-anchor="middle" fill="#556688" font-size="10">8</text>
+<line x1="245.0" y1="52" x2="245.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="245.0" y="48" text-anchor="middle" fill="#556688" font-size="10">12</text>
+<line x1="300.0" y1="52" x2="300.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="300.0" y="48" text-anchor="middle" fill="#556688" font-size="10">16</text>
+<line x1="355.0" y1="52" x2="355.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="355.0" y="48" text-anchor="middle" fill="#556688" font-size="10">20</text>
+<line x1="410.0" y1="52" x2="410.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="410.0" y="48" text-anchor="middle" fill="#556688" font-size="10">24</text>
+<line x1="465.0" y1="52" x2="465.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="465.0" y="48" text-anchor="middle" fill="#556688" font-size="10">28</text>
+<line x1="520.0" y1="52" x2="520.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="520.0" y="48" text-anchor="middle" fill="#556688" font-size="10">32</text>
+<line x1="575.0" y1="52" x2="575.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="575.0" y="48" text-anchor="middle" fill="#556688" font-size="10">36</text>
+<line x1="630.0" y1="52" x2="630.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="630.0" y="48" text-anchor="middle" fill="#556688" font-size="10">40</text>
+<line x1="685.0" y1="52" x2="685.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="685.0" y="48" text-anchor="middle" fill="#556688" font-size="10">44</text>
+<line x1="740.0" y1="52" x2="740.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="740.0" y="48" text-anchor="middle" fill="#556688" font-size="10">48</text>
+<line x1="795.0" y1="52" x2="795.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="795.0" y="48" text-anchor="middle" fill="#556688" font-size="10">52</text>
+<line x1="850.0" y1="52" x2="850.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="850.0" y="48" text-anchor="middle" fill="#556688" font-size="10">56</text>
+<line x1="905.0" y1="52" x2="905.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="905.0" y="48" text-anchor="middle" fill="#556688" font-size="10">60</text>
+<line x1="960.0" y1="52" x2="960.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="960.0" y="48" text-anchor="middle" fill="#556688" font-size="10">64</text>
+<line x1="1015.0" y1="52" x2="1015.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1015.0" y="48" text-anchor="middle" fill="#556688" font-size="10">68</text>
+<line x1="1070.0" y1="52" x2="1070.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1070.0" y="48" text-anchor="middle" fill="#556688" font-size="10">72</text>
+<line x1="1125.0" y1="52" x2="1125.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1125.0" y="48" text-anchor="middle" fill="#556688" font-size="10">76</text>
+<line x1="1180.0" y1="52" x2="1180.0" y2="194" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1180.0" y="48" text-anchor="middle" fill="#556688" font-size="10">80</text>
+<rect x="80.0" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P0 [user] 0.00–3.00 (dur=3.0)</title></rect>
+<text x="100.6" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P0</text>
+<rect x="121.2" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P1 [user] 3.00–6.00 (dur=3.0)</title></rect>
+<text x="141.9" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P1</text>
+<rect x="162.5" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P1 [user] 6.00–9.00 (dur=3.0)</title></rect>
+<text x="183.1" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P1</text>
+<rect x="148.8" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P0 [disk_save] 5.00–10.00 (dur=5.0)</title></rect>
+<text x="183.1" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P0</text>
+<rect x="203.8" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P1 [user] 9.00–12.00 (dur=3.0)</title></rect>
+<text x="224.4" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P1</text>
+<rect x="217.5" y="119" width="68.8" height="30" fill="#A8D8A8" rx="3" opacity="0.92"><title>P2 [disk_load] 10.00–15.00 (dur=5.0)</title></rect>
+<text x="251.9" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P2</text>
+<rect x="245.0" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P0 [user] 12.00–15.00 (dur=3.0)</title></rect>
+<text x="265.6" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P0</text>
+<rect x="286.2" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P1 [user] 15.00–18.00 (dur=3.0)</title></rect>
+<text x="306.9" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P1</text>
+<rect x="286.2" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P0 [disk_save] 15.00–20.00 (dur=5.0)</title></rect>
+<text x="320.6" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P0</text>
+<rect x="327.5" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P1 [user] 18.00–21.00 (dur=3.0)</title></rect>
+<text x="348.1" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P1</text>
+<rect x="368.8" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P0 [user] 21.00–24.00 (dur=3.0)</title></rect>
+<text x="389.4" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P0</text>
+<rect x="355.0" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P2 [disk_save] 20.00–25.00 (dur=5.0)</title></rect>
+<text x="389.4" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P2</text>
+<rect x="410.0" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P1 [user] 24.00–27.00 (dur=3.0)</title></rect>
+<text x="430.6" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P1</text>
+<rect x="423.8" y="119" width="68.8" height="30" fill="#A8D8A8" rx="3" opacity="0.92"><title>P3 [disk_load] 25.00–30.00 (dur=5.0)</title></rect>
+<text x="458.1" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P3</text>
+<rect x="451.2" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P2 [user] 27.00–30.00 (dur=3.0)</title></rect>
+<text x="471.9" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P2</text>
+<rect x="492.5" y="67" width="27.5" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P1 [user] 30.00–32.00 (dur=2.0)</title></rect>
+<text x="506.2" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P1</text>
+<rect x="492.5" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P0 [disk_save] 30.00–35.00 (dur=5.0)</title></rect>
+<text x="526.9" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P0</text>
+<rect x="520.0" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P3 [user] 32.00–35.00 (dur=3.0)</title></rect>
+<text x="540.6" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P3</text>
+<rect x="561.2" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P0 [user] 35.00–38.00 (dur=3.0)</title></rect>
+<text x="581.9" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P0</text>
+<rect x="561.2" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P2 [disk_save] 35.00–40.00 (dur=5.0)</title></rect>
+<text x="595.6" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P2</text>
+<rect x="602.5" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P3 [user] 38.00–41.00 (dur=3.0)</title></rect>
+<text x="623.1" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P3</text>
+<rect x="643.8" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P2 [user] 41.00–44.00 (dur=3.0)</title></rect>
+<text x="664.4" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P2</text>
+<rect x="630.0" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P0 [disk_save] 40.00–45.00 (dur=5.0)</title></rect>
+<text x="664.4" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P0</text>
+<rect x="685.0" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P3 [user] 44.00–47.00 (dur=3.0)</title></rect>
+<text x="705.6" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P3</text>
+<rect x="698.8" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P2 [disk_save] 45.00–50.00 (dur=5.0)</title></rect>
+<text x="733.1" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P2</text>
+<rect x="726.2" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P0 [user] 47.00–50.00 (dur=3.0)</title></rect>
+<text x="746.9" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P0</text>
+<rect x="767.5" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P2 [user] 50.00–53.00 (dur=3.0)</title></rect>
+<text x="788.1" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P2</text>
+<rect x="767.5" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P3 [disk_save] 50.00–55.00 (dur=5.0)</title></rect>
+<text x="801.9" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P3</text>
+<rect x="808.8" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P0 [user] 53.00–56.00 (dur=3.0)</title></rect>
+<text x="829.4" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P0</text>
+<rect x="850.0" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P3 [user] 56.00–59.00 (dur=3.0)</title></rect>
+<text x="870.6" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P3</text>
+<rect x="836.2" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P2 [disk_save] 55.00–60.00 (dur=5.0)</title></rect>
+<text x="870.6" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P2</text>
+<rect x="891.2" y="67" width="27.5" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P0 [user] 59.00–61.00 (dur=2.0)</title></rect>
+<text x="905.0" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P0</text>
+<rect x="918.8" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P2 [user] 61.00–64.00 (dur=3.0)</title></rect>
+<text x="939.4" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P2</text>
+<rect x="905.0" y="119" width="68.8" height="30" fill="#FFD166" rx="3" opacity="0.92"><title>P3 [disk_save] 60.00–65.00 (dur=5.0)</title></rect>
+<text x="939.4" y="139" text-anchor="middle" fill="#1a1a2e" font-size="10" font-weight="bold">P3</text>
+<rect x="960.0" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P2 [user] 64.00–67.00 (dur=3.0)</title></rect>
+<text x="980.6" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P2</text>
+<rect x="1001.2" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P3 [user] 67.00–70.00 (dur=3.0)</title></rect>
+<text x="1021.9" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P3</text>
+<rect x="1042.5" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P2 [user] 70.00–73.00 (dur=3.0)</title></rect>
+<text x="1063.1" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P2</text>
+<rect x="1083.8" y="67" width="41.2" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P3 [user] 73.00–76.00 (dur=3.0)</title></rect>
+<text x="1104.4" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P3</text>
+<rect x="1125.0" y="67" width="27.5" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P2 [user] 76.00–78.00 (dur=2.0)</title></rect>
+<text x="1138.8" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P2</text>
+<rect x="1152.5" y="67" width="27.5" height="30" fill="#4A9EFF" rx="3" opacity="0.92"><title>P3 [user] 78.00–80.00 (dur=2.0)</title></rect>
+<text x="1166.2" y="87" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold">P3</text>
+<rect x="80" y="190" width="14" height="12" fill="#4A9EFF" rx="2"/>
+<text x="98" y="200" fill="#8899bb" font-size="11">user</text>
+<rect x="190" y="190" width="14" height="12" fill="#FF6B35" rx="2"/>
+<text x="208" y="200" fill="#8899bb" font-size="11">sys_proc</text>
+<rect x="300" y="190" width="14" height="12" fill="#A8D8A8" rx="2"/>
+<text x="318" y="200" fill="#8899bb" font-size="11">disk_load</text>
+<rect x="410" y="190" width="14" height="12" fill="#FFD166" rx="2"/>
+<text x="428" y="200" fill="#8899bb" font-size="11">disk_save</text>
+<rect x="520" y="190" width="14" height="12" fill="#2A2A3A" rx="2"/>
+<text x="538" y="200" fill="#8899bb" font-size="11">idle</text>
+<rect x="630" y="190" width="14" height="12" fill="#C678DD" rx="2"/>
+<text x="648" y="200" fill="#8899bb" font-size="11">syscall</text>
+</svg>
+</div>
+
+<h2>Event Log</h2>
+<div class="table-wrapper">
+<table>
+  <thead><tr><th>Time</th><th>CPU</th><th>PID</th><th>Action</th><th>Duration</th><th>Detail</th></tr></thead>
+  <tbody><tr><td>0.000</td><td>SYS</td><td>P0</td><td>RELEASED</td><td>—</td><td>mem=100MB</td></tr>
+<tr><td>0.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=20.00 slice=3.0</td></tr>
+<tr><td>1.000</td><td>SYS</td><td>P1</td><td>RELEASED</td><td>—</td><td>mem=100MB</td></tr>
+<tr><td>3.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=17.00</td></tr>
+<tr><td>3.000</td><td>CPU0</td><td>P1</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=20.00 slice=3.0</td></tr>
+<tr><td>5.000</td><td>SYS</td><td>P2</td><td>RELEASED</td><td>—</td><td>mem=100MB</td></tr>
+<tr><td>5.000</td><td>SYS</td><td>P0</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>6.000</td><td>CPU0</td><td>P1</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=17.00</td></tr>
+<tr><td>6.000</td><td>CPU0</td><td>P1</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=17.00 slice=3.0</td></tr>
+<tr><td>9.000</td><td>CPU0</td><td>P1</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=14.00</td></tr>
+<tr><td>9.000</td><td>CPU0</td><td>P1</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=14.00 slice=3.0</td></tr>
+<tr><td>10.000</td><td>SYS</td><td>P0</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>10.000</td><td>SYS</td><td>P2</td><td>LOAD&lt;-DISK_START</td><td>5.00</td><td>size=100MB</td></tr>
+<tr><td>12.000</td><td>CPU0</td><td>P1</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=11.00</td></tr>
+<tr><td>12.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=17.00 slice=3.0</td></tr>
+<tr><td>15.000</td><td>SYS</td><td>P2</td><td>LOADED_TO_RAM</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>15.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=14.00</td></tr>
+<tr><td>15.000</td><td>CPU0</td><td>P1</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=11.00 slice=3.0</td></tr>
+<tr><td>15.000</td><td>SYS</td><td>P3</td><td>RELEASED</td><td>—</td><td>mem=100MB</td></tr>
+<tr><td>15.000</td><td>SYS</td><td>P0</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>15.000</td><td>SYS</td><td>P2</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>18.000</td><td>CPU0</td><td>P1</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=8.00</td></tr>
+<tr><td>18.000</td><td>CPU0</td><td>P1</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=8.00 slice=3.0</td></tr>
+<tr><td>20.000</td><td>SYS</td><td>P0</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>21.000</td><td>CPU0</td><td>P1</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=5.00</td></tr>
+<tr><td>21.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=14.00 slice=3.0</td></tr>
+<tr><td>24.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=11.00</td></tr>
+<tr><td>24.000</td><td>CPU0</td><td>P1</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=5.00 slice=3.0</td></tr>
+<tr><td>25.000</td><td>SYS</td><td>P2</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>25.000</td><td>SYS</td><td>P3</td><td>LOAD&lt;-DISK_START</td><td>5.00</td><td>size=100MB</td></tr>
+<tr><td>25.000</td><td>SYS</td><td>P0</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>27.000</td><td>CPU0</td><td>P1</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=2.00</td></tr>
+<tr><td>27.000</td><td>CPU0</td><td>P2</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=20.00 slice=3.0</td></tr>
+<tr><td>30.000</td><td>SYS</td><td>P3</td><td>LOADED_TO_RAM</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>30.000</td><td>CPU0</td><td>P2</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=17.00</td></tr>
+<tr><td>30.000</td><td>CPU0</td><td>P1</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=3.0</td></tr>
+<tr><td>32.000</td><td>CPU0</td><td>P1</td><td>FINISHED</td><td>—</td><td>t=32.00</td></tr>
+<tr><td>32.000</td><td>SYS</td><td>P1</td><td>RAM_FREED</td><td>—</td><td>process finished, freed 100MB</td></tr>
+<tr><td>32.000</td><td>CPU0</td><td>P3</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=20.00 slice=3.0</td></tr>
+<tr><td>35.000</td><td>SYS</td><td>P0</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>35.000</td><td>SYS</td><td>P2</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>35.000</td><td>CPU0</td><td>P3</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=17.00</td></tr>
+<tr><td>35.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=11.00 slice=3.0</td></tr>
+<tr><td>38.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=8.00</td></tr>
+<tr><td>38.000</td><td>CPU0</td><td>P3</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=17.00 slice=3.0</td></tr>
+<tr><td>40.000</td><td>SYS</td><td>P2</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>40.000</td><td>SYS</td><td>P0</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>41.000</td><td>CPU0</td><td>P3</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=14.00</td></tr>
+<tr><td>41.000</td><td>CPU0</td><td>P2</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=17.00 slice=3.0</td></tr>
+<tr><td>44.000</td><td>CPU0</td><td>P2</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=14.00</td></tr>
+<tr><td>44.000</td><td>CPU0</td><td>P3</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=14.00 slice=3.0</td></tr>
+<tr><td>45.000</td><td>SYS</td><td>P0</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>45.000</td><td>SYS</td><td>P2</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>47.000</td><td>CPU0</td><td>P3</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=11.00</td></tr>
+<tr><td>47.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=8.00 slice=3.0</td></tr>
+<tr><td>50.000</td><td>SYS</td><td>P2</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>50.000</td><td>SYS</td><td>P3</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>50.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=5.00</td></tr>
+<tr><td>50.000</td><td>CPU0</td><td>P2</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=14.00 slice=3.0</td></tr>
+<tr><td>53.000</td><td>CPU0</td><td>P2</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=11.00</td></tr>
+<tr><td>53.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=5.00 slice=3.0</td></tr>
+<tr><td>55.000</td><td>SYS</td><td>P3</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>55.000</td><td>SYS</td><td>P2</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>56.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=2.00</td></tr>
+<tr><td>56.000</td><td>CPU0</td><td>P3</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=11.00 slice=3.0</td></tr>
+<tr><td>59.000</td><td>CPU0</td><td>P3</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=8.00</td></tr>
+<tr><td>59.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=3.0</td></tr>
+<tr><td>60.000</td><td>SYS</td><td>P2</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>60.000</td><td>SYS</td><td>P3</td><td>EVICT-&gt;DISK</td><td>5.00</td><td>LRU evict, size=100MB</td></tr>
+<tr><td>61.000</td><td>CPU0</td><td>P0</td><td>FINISHED</td><td>—</td><td>t=61.00</td></tr>
+<tr><td>61.000</td><td>SYS</td><td>P0</td><td>RAM_FREED</td><td>—</td><td>process finished, freed 100MB</td></tr>
+<tr><td>61.000</td><td>CPU0</td><td>P2</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=11.00 slice=3.0</td></tr>
+<tr><td>64.000</td><td>CPU0</td><td>P2</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=8.00</td></tr>
+<tr><td>64.000</td><td>CPU0</td><td>P2</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=8.00 slice=3.0</td></tr>
+<tr><td>65.000</td><td>SYS</td><td>P3</td><td>SAVED_TO_DISK</td><td>—</td><td>size=100MB</td></tr>
+<tr><td>67.000</td><td>CPU0</td><td>P2</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=5.00</td></tr>
+<tr><td>67.000</td><td>CPU0</td><td>P3</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=8.00 slice=3.0</td></tr>
+<tr><td>70.000</td><td>CPU0</td><td>P3</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=5.00</td></tr>
+<tr><td>70.000</td><td>CPU0</td><td>P2</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=5.00 slice=3.0</td></tr>
+<tr><td>73.000</td><td>CPU0</td><td>P2</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=2.00</td></tr>
+<tr><td>73.000</td><td>CPU0</td><td>P3</td><td>DISPATCH</td><td>3.00</td><td>burst_rem=5.00 slice=3.0</td></tr>
+<tr><td>76.000</td><td>CPU0</td><td>P3</td><td>SLICE_EXPIRE</td><td>—</td><td>burst_rem=2.00</td></tr>
+<tr><td>76.000</td><td>CPU0</td><td>P2</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=3.0</td></tr>
+<tr><td>78.000</td><td>CPU0</td><td>P2</td><td>FINISHED</td><td>—</td><td>t=78.00</td></tr>
+<tr><td>78.000</td><td>SYS</td><td>P2</td><td>RAM_FREED</td><td>—</td><td>process finished, freed 100MB</td></tr>
+<tr><td>78.000</td><td>CPU0</td><td>P3</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=3.0</td></tr>
+<tr><td>80.000</td><td>CPU0</td><td>P3</td><td>FINISHED</td><td>—</td><td>t=80.00</td></tr>
+<tr><td>80.000</td><td>SYS</td><td>P3</td><td>RAM_FREED</td><td>—</td><td>process finished, freed 100MB</td></tr></tbody>
+</table>
+</div>
+
+<footer>Generated by RR-Scheduler Simulation Engine</footer>
+</body>
+</html>

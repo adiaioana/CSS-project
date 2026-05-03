@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Scheduler Simulation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;600;800&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:     #0d0d1a;
+    --bg2:    #12122a;
+    --bg3:    #1a1a3a;
+    --accent: #70C8FF;
+    --orange: #FF6B35;
+    --text:   #dde8f8;
+    --muted:  #6a82a8;
+    --border: #2a2a4a;
+    --mono:   'JetBrains Mono', 'Courier New', monospace;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; }
+  body { padding: 32px; }
+
+  h1 { font-size: 2rem; font-weight: 800; letter-spacing: .08em;
+        background: linear-gradient(90deg, var(--accent), var(--orange));
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-family: var(--mono);
+               font-size: .82rem; margin-bottom: 32px; letter-spacing: .03em; }
+
+  .params-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px; margin-bottom: 40px;
+  }
+  .param-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 18px;
+  }
+  .param-card .label { font-size: .7rem; color: var(--muted); text-transform: uppercase;
+                        letter-spacing: .1em; font-family: var(--mono); }
+  .param-card .value { font-size: 1.4rem; font-weight: 600; color: var(--accent); margin-top: 4px; }
+
+  h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: .06em;
+        color: var(--accent); text-transform: uppercase;
+        border-left: 3px solid var(--orange); padding-left: 12px;
+        margin: 36px 0 16px; }
+
+  .gantt-wrapper {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; overflow-x: auto; padding: 16px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: .84rem;
+           font-family: var(--mono); font-weight: 400; }
+  thead tr { background: var(--bg3); }
+  th { padding: 10px 14px; text-align: left; color: var(--muted);
+        text-transform: uppercase; font-size: .68rem; letter-spacing: .12em;
+        font-weight: 700; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 14px; border-bottom: 1px solid #1e1e36; color: var(--text);
+        font-weight: 400; line-height: 1.5; }
+  tr:hover td { background: #1e1e3a; }
+  .table-wrapper { max-height: 480px; overflow-y: auto;
+                    border: 1px solid var(--border); border-radius: 8px; }
+
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px; margin-bottom: 8px;
+  }
+  .stat-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 16px;
+  }
+  .stat-card .label { font-size: .68rem; color: var(--muted); text-transform: uppercase;
+                       letter-spacing: .1em; font-family: var(--mono); }
+  .stat-card .value { font-size: 1.3rem; font-weight: 600; color: var(--text); margin-top: 3px; }
+
+  footer { margin-top: 48px; padding: 20px 0; border-top: 1px solid var(--border);
+            text-align: center; color: var(--muted); font-size: .75rem;
+            font-family: var(--mono); letter-spacing: .04em; }
+
+  /* Gantt zoom controls */
+  .gantt-controls {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+  .gantt-controls button {
+    background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--mono); font-size: .82rem; padding: 4px 12px;
+    border-radius: 5px; cursor: pointer; transition: background .15s;
+  }
+  .gantt-controls button:hover { background: #2a2a5a; }
+  .gantt-controls button:disabled { opacity: .35; cursor: default; }
+  .zoom-label {
+    font-family: var(--mono); font-size: .78rem; color: var(--accent);
+    min-width: 44px; text-align: center;
+  }
+  .zoom-hint { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-left: 6px; }
+
+  /* Gantt bar hover */
+  .gantt-bar { cursor: default; transition: opacity .12s, filter .12s; }
+  .gantt-bar:hover { opacity: 1 !important; filter: brightness(1.18); }
+
+  /* Tooltip */
+  #gantt-tip {
+    position: fixed; display: none; pointer-events: none; z-index: 200;
+    background: #161630; border: 1px solid #3a3a6a;
+    border-radius: 8px; padding: 10px 14px;
+    font-family: var(--mono); font-size: .78rem; color: var(--text);
+    box-shadow: 0 6px 20px rgba(0,0,0,.6);
+    min-width: 170px; line-height: 1.7;
+  }
+  #gantt-tip .tip-title { font-weight: 700; font-size: .82rem;
+                           color: var(--accent); margin-bottom: 4px; }
+  #gantt-tip .tip-row   { color: var(--muted); }
+  #gantt-tip .tip-row span { color: var(--text); }
+</style>
+</head>
+<body>
+<div id="gantt-tip"></div>
+
+<h1>Scheduler Simulation</h1>
+<p class="subtitle">Preemptive Round-Robin &nbsp;|&nbsp; Virtual Memory (LRU) &nbsp;|&nbsp; Periodic System Process</p>
+
+<div class="params-grid">
+  <div class="param-card"><div class="label">Processors</div><div class="value">3</div></div>
+  <div class="param-card"><div class="label">RAM</div><div class="value">512 MB</div></div>
+  <div class="param-card"><div class="label">Time Slice</div><div class="value">4.0</div></div>
+  <div class="param-card"><div class="label">SysProc Period</div><div class="value">20.0</div></div>
+  <div class="param-card"><div class="label">SysProc Duration</div><div class="value">2.0</div></div>
+  <div class="param-card"><div class="label">Disk Rate</div><div class="value">50.0 MB/t</div></div>
+</div>
+
+<h2>Processes</h2>
+<div class="table-wrapper">
+<table>
+  <thead><tr><th>PID</th><th>Release</th><th>Memory</th><th>Bursts</th><th>Syscalls</th><th>Final State</th></tr></thead>
+  <tbody><tr><td>P0</td><td>0</td><td>128 MB</td><td>12, 5, 8, 4</td><td>3, 2, 1</td><td style="color:#70C8FF">FINISHED</td></tr>
+<tr><td>P1</td><td>2</td><td>256 MB</td><td>5, 8, 6</td><td>2, 4</td><td style="color:#70C8FF">FINISHED</td></tr>
+<tr><td>P2</td><td>5</td><td>200 MB</td><td>10, 5, 5</td><td>2, 1</td><td style="color:#70C8FF">FINISHED</td></tr>
+<tr><td>P3</td><td>8</td><td>64 MB</td><td>4, 4, 4</td><td>1, 1</td><td style="color:#70C8FF">FINISHED</td></tr>
+<tr><td>P4</td><td>15</td><td>350 MB</td><td>20, 10</td><td>5</td><td style="color:#70C8FF">FINISHED</td></tr>
+<tr><td>P5</td><td>20</td><td>100 MB</td><td>2, 2, 2, 2, 2</td><td>1, 1, 1, 1</td><td style="color:#70C8FF">FINISHED</td></tr>
+<tr><td>P6</td><td>25</td><td>256 MB</td><td>30</td><td>-</td><td style="color:#70C8FF">FINISHED</td></tr>
+<tr><td>P7</td><td>35</td><td>128 MB</td><td>8, 8, 8</td><td>2, 2</td><td style="color:#70C8FF">FINISHED</td></tr></tbody>
+</table>
+</div>
+
+<h2>Gantt Chart</h2>
+<div class="gantt-controls">
+  <button id="zoom-out" onclick="zoomGantt(-1)">&#8722;</button>
+  <span class="zoom-label" id="zoom-label">100%</span>
+  <button id="zoom-in"  onclick="zoomGantt(+1)">&#43;</button>
+  <button onclick="resetGantt()">Reset</button>
+  <span class="zoom-hint">zoom in to see details &mdash; scroll appears automatically</span>
+</div>
+<div class="gantt-wrapper">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 440" preserveAspectRatio="none" style="width:100%; min-width:900px; height:440px; display:block; font-family:'Courier New',monospace; background:#1a1a2e;">
+<rect x="80" y="60" width="1880" height="68" fill="#12122a" rx="4"/>
+<text x="74" y="99" text-anchor="end" fill="#8899bb" font-size="12">CPU0</text>
+<rect x="80" y="140" width="1880" height="68" fill="#12122a" rx="4"/>
+<text x="74" y="179" text-anchor="end" fill="#8899bb" font-size="12">CPU1</text>
+<rect x="80" y="220" width="1880" height="68" fill="#12122a" rx="4"/>
+<text x="74" y="259" text-anchor="end" fill="#8899bb" font-size="12">CPU2</text>
+<rect x="80" y="300" width="1880" height="68" fill="#12122a" rx="4"/>
+<text x="74" y="339" text-anchor="end" fill="#8899bb" font-size="12">DISK</text>
+<text x="1020" y="338" text-anchor="middle" fill="#2e3a50" font-size="11" font-style="italic">idle</text>
+<line x1="80.0" y1="52" x2="80.0" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="80.0" y="48" text-anchor="middle" fill="#556688" font-size="10">0</text>
+<line x1="128.6" y1="52" x2="128.6" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="128.6" y="48" text-anchor="middle" fill="#556688" font-size="10">3</text>
+<line x1="177.2" y1="52" x2="177.2" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="177.2" y="48" text-anchor="middle" fill="#556688" font-size="10">6</text>
+<line x1="225.9" y1="52" x2="225.9" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="225.9" y="48" text-anchor="middle" fill="#556688" font-size="10">9</text>
+<line x1="274.5" y1="52" x2="274.5" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="274.5" y="48" text-anchor="middle" fill="#556688" font-size="10">12</text>
+<line x1="323.1" y1="52" x2="323.1" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="323.1" y="48" text-anchor="middle" fill="#556688" font-size="10">15</text>
+<line x1="371.7" y1="52" x2="371.7" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="371.7" y="48" text-anchor="middle" fill="#556688" font-size="10">18</text>
+<line x1="420.3" y1="52" x2="420.3" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="420.3" y="48" text-anchor="middle" fill="#556688" font-size="10">21</text>
+<line x1="469.0" y1="52" x2="469.0" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="469.0" y="48" text-anchor="middle" fill="#556688" font-size="10">24</text>
+<line x1="517.6" y1="52" x2="517.6" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="517.6" y="48" text-anchor="middle" fill="#556688" font-size="10">27</text>
+<line x1="566.2" y1="52" x2="566.2" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="566.2" y="48" text-anchor="middle" fill="#556688" font-size="10">30</text>
+<line x1="614.8" y1="52" x2="614.8" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="614.8" y="48" text-anchor="middle" fill="#556688" font-size="10">33</text>
+<line x1="663.4" y1="52" x2="663.4" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="663.4" y="48" text-anchor="middle" fill="#556688" font-size="10">36</text>
+<line x1="712.1" y1="52" x2="712.1" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="712.1" y="48" text-anchor="middle" fill="#556688" font-size="10">39</text>
+<line x1="760.7" y1="52" x2="760.7" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="760.7" y="48" text-anchor="middle" fill="#556688" font-size="10">42</text>
+<line x1="809.3" y1="52" x2="809.3" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="809.3" y="48" text-anchor="middle" fill="#556688" font-size="10">45</text>
+<line x1="857.9" y1="52" x2="857.9" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="857.9" y="48" text-anchor="middle" fill="#556688" font-size="10">48</text>
+<line x1="906.6" y1="52" x2="906.6" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="906.6" y="48" text-anchor="middle" fill="#556688" font-size="10">51</text>
+<line x1="955.2" y1="52" x2="955.2" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="955.2" y="48" text-anchor="middle" fill="#556688" font-size="10">54</text>
+<line x1="1003.8" y1="52" x2="1003.8" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1003.8" y="48" text-anchor="middle" fill="#556688" font-size="10">57</text>
+<line x1="1052.4" y1="52" x2="1052.4" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1052.4" y="48" text-anchor="middle" fill="#556688" font-size="10">60</text>
+<line x1="1101.0" y1="52" x2="1101.0" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1101.0" y="48" text-anchor="middle" fill="#556688" font-size="10">63</text>
+<line x1="1149.7" y1="52" x2="1149.7" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1149.7" y="48" text-anchor="middle" fill="#556688" font-size="10">66</text>
+<line x1="1198.3" y1="52" x2="1198.3" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1198.3" y="48" text-anchor="middle" fill="#556688" font-size="10">69</text>
+<line x1="1246.9" y1="52" x2="1246.9" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1246.9" y="48" text-anchor="middle" fill="#556688" font-size="10">72</text>
+<line x1="1295.5" y1="52" x2="1295.5" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1295.5" y="48" text-anchor="middle" fill="#556688" font-size="10">75</text>
+<line x1="1344.1" y1="52" x2="1344.1" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1344.1" y="48" text-anchor="middle" fill="#556688" font-size="10">78</text>
+<line x1="1392.8" y1="52" x2="1392.8" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1392.8" y="48" text-anchor="middle" fill="#556688" font-size="10">81</text>
+<line x1="1441.4" y1="52" x2="1441.4" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1441.4" y="48" text-anchor="middle" fill="#556688" font-size="10">84</text>
+<line x1="1490.0" y1="52" x2="1490.0" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1490.0" y="48" text-anchor="middle" fill="#556688" font-size="10">87</text>
+<line x1="1538.6" y1="52" x2="1538.6" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1538.6" y="48" text-anchor="middle" fill="#556688" font-size="10">90</text>
+<line x1="1587.2" y1="52" x2="1587.2" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1587.2" y="48" text-anchor="middle" fill="#556688" font-size="10">93</text>
+<line x1="1635.9" y1="52" x2="1635.9" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1635.9" y="48" text-anchor="middle" fill="#556688" font-size="10">96</text>
+<line x1="1684.5" y1="52" x2="1684.5" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1684.5" y="48" text-anchor="middle" fill="#556688" font-size="10">99</text>
+<line x1="1733.1" y1="52" x2="1733.1" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1733.1" y="48" text-anchor="middle" fill="#556688" font-size="10">102</text>
+<line x1="1781.7" y1="52" x2="1781.7" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1781.7" y="48" text-anchor="middle" fill="#556688" font-size="10">105</text>
+<line x1="1830.3" y1="52" x2="1830.3" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1830.3" y="48" text-anchor="middle" fill="#556688" font-size="10">108</text>
+<line x1="1879.0" y1="52" x2="1879.0" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1879.0" y="48" text-anchor="middle" fill="#556688" font-size="10">111</text>
+<line x1="1927.6" y1="52" x2="1927.6" y2="410" stroke="#2a2a4a" stroke-width="1"/>
+<text x="1927.6" y="48" text-anchor="middle" fill="#556688" font-size="10">114</text>
+<rect class="gantt-bar" x="80.0" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P0" data-cat="User Process" data-start="0.00" data-end="4.00" data-dur="4.00"/>
+<text x="112.4" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P0</text>
+<rect class="gantt-bar" x="112.4" y="150" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P1" data-cat="User Process" data-start="2.00" data-end="6.00" data-dur="4.00"/>
+<text x="144.8" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P1</text>
+<rect class="gantt-bar" x="177.2" y="150" width="16.2" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P1" data-cat="User Process" data-start="6.00" data-end="7.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="144.8" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P0" data-cat="User Process" data-start="4.00" data-end="8.00" data-dur="4.00"/>
+<text x="177.2" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P0</text>
+<rect class="gantt-bar" x="193.4" y="150" width="32.4" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="7.00" data-end="9.00" data-dur="2.00"/>
+<text x="209.7" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="209.7" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P0" data-cat="User Process" data-start="8.00" data-end="12.00" data-dur="4.00"/>
+<text x="242.1" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P0</text>
+<rect class="gantt-bar" x="209.7" y="230" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P3" data-cat="User Process" data-start="8.00" data-end="12.00" data-dur="4.00"/>
+<text x="242.1" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P3</text>
+<rect class="gantt-bar" x="225.9" y="150" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P1" data-cat="User Process" data-start="9.00" data-end="13.00" data-dur="4.00"/>
+<text x="258.3" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P1</text>
+<rect class="gantt-bar" x="274.5" y="70" width="48.6" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="12.00" data-end="15.00" data-dur="3.00"/>
+<text x="298.8" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="323.1" y="230" width="16.2" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="15.00" data-end="16.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="290.7" y="150" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P1" data-cat="User Process" data-start="13.00" data-end="17.00" data-dur="4.00"/>
+<text x="323.1" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P1</text>
+<rect class="gantt-bar" x="323.1" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P0" data-cat="User Process" data-start="15.00" data-end="19.00" data-dur="4.00"/>
+<text x="355.5" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P0</text>
+<rect class="gantt-bar" x="339.3" y="230" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P3" data-cat="User Process" data-start="16.00" data-end="20.00" data-dur="4.00"/>
+<text x="371.7" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P3</text>
+<rect class="gantt-bar" x="387.9" y="70" width="16.2" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P0" data-cat="User Process" data-start="19.00" data-end="20.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="355.5" y="150" width="64.8" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="17.00" data-end="21.00" data-dur="4.00"/>
+<text x="387.9" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="420.3" y="70" width="48.6" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="21.00" data-end="24.00" data-dur="3.00"/>
+<text x="444.7" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="420.3" y="150" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P1" data-cat="User Process" data-start="21.00" data-end="25.00" data-dur="4.00"/>
+<text x="452.8" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P1</text>
+<rect class="gantt-bar" x="485.2" y="150" width="32.4" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P1" data-cat="User Process" data-start="25.00" data-end="27.00" data-dur="2.00"/>
+<text x="501.4" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P1</text>
+<rect class="gantt-bar" x="469.0" y="230" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P3" data-cat="User Process" data-start="24.00" data-end="28.00" data-dur="4.00"/>
+<text x="501.4" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P3</text>
+<rect class="gantt-bar" x="469.0" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P0" data-cat="User Process" data-start="24.00" data-end="28.00" data-dur="4.00"/>
+<text x="501.4" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P0</text>
+<rect class="gantt-bar" x="517.6" y="150" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P2" data-cat="User Process" data-start="27.00" data-end="31.00" data-dur="4.00"/>
+<text x="550.0" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P2</text>
+<rect class="gantt-bar" x="533.8" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P0" data-cat="User Process" data-start="28.00" data-end="32.00" data-dur="4.00"/>
+<text x="566.2" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P0</text>
+<rect class="gantt-bar" x="598.6" y="70" width="16.2" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="32.00" data-end="33.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="582.4" y="150" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P2" data-cat="User Process" data-start="31.00" data-end="35.00" data-dur="4.00"/>
+<text x="614.8" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P2</text>
+<rect class="gantt-bar" x="614.8" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P0" data-cat="User Process" data-start="33.00" data-end="37.00" data-dur="4.00"/>
+<text x="647.2" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P0</text>
+<rect class="gantt-bar" x="647.2" y="150" width="32.4" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P2" data-cat="User Process" data-start="35.00" data-end="37.00" data-dur="2.00"/>
+<text x="663.4" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P2</text>
+<rect class="gantt-bar" x="679.7" y="70" width="32.4" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="37.00" data-end="39.00" data-dur="2.00"/>
+<text x="695.9" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="647.2" y="230" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P7" data-cat="User Process" data-start="35.00" data-end="39.00" data-dur="4.00"/>
+<text x="679.7" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P7</text>
+<rect class="gantt-bar" x="728.3" y="70" width="32.4" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="40.00" data-end="42.00" data-dur="2.00"/>
+<text x="744.5" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="712.1" y="230" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P7" data-cat="User Process" data-start="39.00" data-end="43.00" data-dur="4.00"/>
+<text x="744.5" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P7</text>
+<rect class="gantt-bar" x="712.1" y="150" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P2" data-cat="User Process" data-start="39.00" data-end="43.00" data-dur="4.00"/>
+<text x="744.5" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P2</text>
+<rect class="gantt-bar" x="776.9" y="150" width="16.2" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P2" data-cat="User Process" data-start="43.00" data-end="44.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="776.9" y="70" width="32.4" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="43.00" data-end="45.00" data-dur="2.00"/>
+<text x="793.1" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="809.3" y="70" width="16.2" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="45.00" data-end="46.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="809.3" y="230" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P7" data-cat="User Process" data-start="45.00" data-end="49.00" data-dur="4.00"/>
+<text x="841.7" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P7</text>
+<rect class="gantt-bar" x="825.5" y="150" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P2" data-cat="User Process" data-start="46.00" data-end="50.00" data-dur="4.00"/>
+<text x="857.9" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P2</text>
+<rect class="gantt-bar" x="890.3" y="150" width="16.2" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P2" data-cat="User Process" data-start="50.00" data-end="51.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="874.1" y="230" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P7" data-cat="User Process" data-start="49.00" data-end="53.00" data-dur="4.00"/>
+<text x="906.6" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P7</text>
+<rect class="gantt-bar" x="939.0" y="150" width="32.4" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="53.00" data-end="55.00" data-dur="2.00"/>
+<text x="955.2" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="906.6" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P4" data-cat="User Process" data-start="51.00" data-end="55.00" data-dur="4.00"/>
+<text x="939.0" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P4</text>
+<rect class="gantt-bar" x="971.4" y="230" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P7" data-cat="User Process" data-start="55.00" data-end="59.00" data-dur="4.00"/>
+<text x="1003.8" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P7</text>
+<rect class="gantt-bar" x="971.4" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P4" data-cat="User Process" data-start="55.00" data-end="59.00" data-dur="4.00"/>
+<text x="1003.8" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P4</text>
+<rect class="gantt-bar" x="1052.4" y="150" width="32.4" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="60.00" data-end="62.00" data-dur="2.00"/>
+<text x="1068.6" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="1036.2" y="230" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P7" data-cat="User Process" data-start="59.00" data-end="63.00" data-dur="4.00"/>
+<text x="1068.6" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P7</text>
+<rect class="gantt-bar" x="1036.2" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P4" data-cat="User Process" data-start="59.00" data-end="63.00" data-dur="4.00"/>
+<text x="1068.6" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P4</text>
+<rect class="gantt-bar" x="1101.0" y="150" width="32.4" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P5" data-cat="User Process" data-start="63.00" data-end="65.00" data-dur="2.00"/>
+<text x="1117.2" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P5</text>
+<rect class="gantt-bar" x="1133.4" y="150" width="16.2" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="65.00" data-end="66.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="1101.0" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P4" data-cat="User Process" data-start="63.00" data-end="67.00" data-dur="4.00"/>
+<text x="1133.4" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P4</text>
+<rect class="gantt-bar" x="1149.7" y="150" width="32.4" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P5" data-cat="User Process" data-start="66.00" data-end="68.00" data-dur="2.00"/>
+<text x="1165.9" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P5</text>
+<rect class="gantt-bar" x="1182.1" y="150" width="16.2" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="68.00" data-end="69.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="1165.9" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P4" data-cat="User Process" data-start="67.00" data-end="71.00" data-dur="4.00"/>
+<text x="1198.3" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P4</text>
+<rect class="gantt-bar" x="1198.3" y="150" width="32.4" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P5" data-cat="User Process" data-start="69.00" data-end="71.00" data-dur="2.00"/>
+<text x="1214.5" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P5</text>
+<rect class="gantt-bar" x="1230.7" y="70" width="81.0" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="71.00" data-end="76.00" data-dur="5.00"/>
+<text x="1271.2" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="1311.7" y="150" width="16.2" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="76.00" data-end="77.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="1327.9" y="150" width="32.4" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P5" data-cat="User Process" data-start="77.00" data-end="79.00" data-dur="2.00"/>
+<text x="1344.1" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P5</text>
+<rect class="gantt-bar" x="1360.3" y="150" width="16.2" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="79.00" data-end="80.00" data-dur="1.00"/>
+<rect class="gantt-bar" x="1311.7" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P4" data-cat="User Process" data-start="76.00" data-end="80.00" data-dur="4.00"/>
+<text x="1344.1" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P4</text>
+<rect class="gantt-bar" x="1376.6" y="230" width="32.4" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="80.00" data-end="82.00" data-dur="2.00"/>
+<text x="1392.8" y="259" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="1376.6" y="150" width="32.4" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P5" data-cat="User Process" data-start="80.00" data-end="82.00" data-dur="2.00"/>
+<text x="1392.8" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P5</text>
+<rect class="gantt-bar" x="1376.6" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P4" data-cat="User Process" data-start="80.00" data-end="84.00" data-dur="4.00"/>
+<text x="1409.0" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P4</text>
+<rect class="gantt-bar" x="1441.4" y="70" width="32.4" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P4" data-cat="User Process" data-start="84.00" data-end="86.00" data-dur="2.00"/>
+<text x="1457.6" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P4</text>
+<rect class="gantt-bar" x="1473.8" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P6" data-cat="User Process" data-start="86.00" data-end="90.00" data-dur="4.00"/>
+<text x="1506.2" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P6</text>
+<rect class="gantt-bar" x="1538.6" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P6" data-cat="User Process" data-start="90.00" data-end="94.00" data-dur="4.00"/>
+<text x="1571.0" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P6</text>
+<rect class="gantt-bar" x="1603.4" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P6" data-cat="User Process" data-start="94.00" data-end="98.00" data-dur="4.00"/>
+<text x="1635.9" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P6</text>
+<rect class="gantt-bar" x="1700.7" y="150" width="32.4" height="48" fill="#FF6B35" rx="3" opacity="0.92" data-pid="SYS" data-cat="System Process" data-start="100.00" data-end="102.00" data-dur="2.00"/>
+<text x="1716.9" y="179" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">SYS</text>
+<rect class="gantt-bar" x="1668.3" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P6" data-cat="User Process" data-start="98.00" data-end="102.00" data-dur="4.00"/>
+<text x="1700.7" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P6</text>
+<rect class="gantt-bar" x="1733.1" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P6" data-cat="User Process" data-start="102.00" data-end="106.00" data-dur="4.00"/>
+<text x="1765.5" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P6</text>
+<rect class="gantt-bar" x="1797.9" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P6" data-cat="User Process" data-start="106.00" data-end="110.00" data-dur="4.00"/>
+<text x="1830.3" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P6</text>
+<rect class="gantt-bar" x="1862.8" y="70" width="64.8" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P6" data-cat="User Process" data-start="110.00" data-end="114.00" data-dur="4.00"/>
+<text x="1895.2" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P6</text>
+<rect class="gantt-bar" x="1927.6" y="70" width="32.4" height="48" fill="#4A9EFF" rx="3" opacity="0.92" data-pid="P6" data-cat="User Process" data-start="114.00" data-end="116.00" data-dur="2.00"/>
+<text x="1943.8" y="99" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="bold" style="pointer-events:none">P6</text>
+<rect x="80" y="406" width="14" height="12" fill="#4A9EFF" rx="2"/>
+<text x="98" y="416" fill="#8899bb" font-size="11">User Process</text>
+<rect x="210" y="406" width="14" height="12" fill="#FF6B35" rx="2"/>
+<text x="228" y="416" fill="#8899bb" font-size="11">System Process</text>
+</svg>
+</div>
+
+<h2>Simulation Summary</h2>
+<div class="stats-grid">
+  <div class="stat-card"><div class="label">Total Time</div><div class="value">116.00</div></div>
+  <div class="stat-card"><div class="label">Processes Finished</div><div class="value">8 / 8</div></div>
+  <div class="stat-card"><div class="label">Context Switches</div><div class="value">27</div></div>
+  <div class="stat-card"><div class="label">RAM Evictions</div><div class="value">0</div></div>
+  <div class="stat-card"><div class="label">Disk Loads</div><div class="value">0</div></div>
+</div>
+
+<h2>Event Log</h2>
+<div class="table-wrapper">
+<table>
+  <thead><tr><th>Time (units)</th><th>CPU (core)</th><th>PID</th><th>Action (event type)</th><th>Duration (units)</th><th>Detail</th></tr></thead>
+  <tbody><tr><td>0.000</td><td>SYS</td><td>P0</td><td>RELEASED</td><td>-</td><td>mem=128MB</td></tr>
+<tr><td>0.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=12.00 slice=4.0</td></tr>
+<tr><td>2.000</td><td>SYS</td><td>P1</td><td>RELEASED</td><td>-</td><td>mem=256MB</td></tr>
+<tr><td>2.000</td><td>CPU1</td><td>P1</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=5.00 slice=4.0</td></tr>
+<tr><td>4.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=8.00</td></tr>
+<tr><td>4.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=8.00 slice=4.0</td></tr>
+<tr><td>5.000</td><td>SYS</td><td>P2</td><td>RELEASED</td><td>-</td><td>mem=200MB</td></tr>
+<tr><td>5.000</td><td>SYS</td><td>P2</td><td>WAIT_FOR_RAM</td><td>-</td><td>deferred — ram_used=384/512 MB</td></tr>
+<tr><td>6.000</td><td>CPU1</td><td>P1</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=1.00</td></tr>
+<tr><td>6.000</td><td>CPU1</td><td>P1</td><td>DISPATCH</td><td>1.00</td><td>burst_rem=1.00 slice=4.0</td></tr>
+<tr><td>7.000</td><td>CPU1</td><td>P1</td><td>SYSCALL_ISSUED</td><td>2.00</td><td>syscall #1</td></tr>
+<tr><td>7.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_START</td><td>2.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>8.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=4.00</td></tr>
+<tr><td>8.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>8.000</td><td>SYS</td><td>P3</td><td>RELEASED</td><td>-</td><td>mem=64MB</td></tr>
+<tr><td>8.000</td><td>CPU2</td><td>P3</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>9.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>9.000</td><td>SYS</td><td>P1</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 1</td></tr>
+<tr><td>9.000</td><td>CPU1</td><td>P1</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=8.00 slice=4.0</td></tr>
+<tr><td>12.000</td><td>CPU0</td><td>P0</td><td>SYSCALL_ISSUED</td><td>3.00</td><td>syscall #1</td></tr>
+<tr><td>12.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_START</td><td>3.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>12.000</td><td>CPU2</td><td>P3</td><td>SYSCALL_ISSUED</td><td>1.00</td><td>syscall #1</td></tr>
+<tr><td>13.000</td><td>CPU1</td><td>P1</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=4.00</td></tr>
+<tr><td>13.000</td><td>CPU1</td><td>P1</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>15.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>15.000</td><td>SYS</td><td>P0</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 1</td></tr>
+<tr><td>15.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=5.00 slice=4.0</td></tr>
+<tr><td>15.000</td><td>CPU2</td><td>SYS</td><td>SYS_PROC_START</td><td>1.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>15.000</td><td>SYS</td><td>P4</td><td>RELEASED</td><td>-</td><td>mem=350MB</td></tr>
+<tr><td>15.000</td><td>SYS</td><td>P4</td><td>WAIT_FOR_RAM</td><td>-</td><td>deferred — ram_used=448/512 MB</td></tr>
+<tr><td>16.000</td><td>CPU2</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>16.000</td><td>SYS</td><td>P3</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 1</td></tr>
+<tr><td>16.000</td><td>CPU2</td><td>P3</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>17.000</td><td>CPU1</td><td>P1</td><td>SYSCALL_ISSUED</td><td>4.00</td><td>syscall #2</td></tr>
+<tr><td>17.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_START</td><td>4.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>19.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=1.00</td></tr>
+<tr><td>19.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>1.00</td><td>burst_rem=1.00 slice=4.0</td></tr>
+<tr><td>20.000</td><td>CPU2</td><td>P3</td><td>SYSCALL_ISSUED</td><td>1.00</td><td>syscall #2</td></tr>
+<tr><td>20.000</td><td>CPU0</td><td>P0</td><td>SYSCALL_ISSUED</td><td>2.00</td><td>syscall #2</td></tr>
+<tr><td>20.000</td><td>SYS</td><td>SYS</td><td>SYS_PROC_RELEASED</td><td>-</td><td>period=20.0</td></tr>
+<tr><td>20.000</td><td>SYS</td><td>P5</td><td>RELEASED</td><td>-</td><td>mem=100MB</td></tr>
+<tr><td>20.000</td><td>SYS</td><td>P5</td><td>WAIT_FOR_RAM</td><td>-</td><td>deferred — ram_used=448/512 MB</td></tr>
+<tr><td>21.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>21.000</td><td>SYS</td><td>P1</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 2</td></tr>
+<tr><td>21.000</td><td>CPU1</td><td>P1</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=6.00 slice=4.0</td></tr>
+<tr><td>21.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_START</td><td>3.00</td><td>handling 2 syscall(s)</td></tr>
+<tr><td>24.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 2 syscall(s)</td></tr>
+<tr><td>24.000</td><td>SYS</td><td>P3</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 2</td></tr>
+<tr><td>24.000</td><td>SYS</td><td>P0</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 2</td></tr>
+<tr><td>24.000</td><td>CPU2</td><td>P3</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>24.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=8.00 slice=4.0</td></tr>
+<tr><td>25.000</td><td>CPU1</td><td>P1</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=2.00</td></tr>
+<tr><td>25.000</td><td>CPU1</td><td>P1</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=4.0</td></tr>
+<tr><td>25.000</td><td>SYS</td><td>P6</td><td>RELEASED</td><td>-</td><td>mem=256MB</td></tr>
+<tr><td>25.000</td><td>SYS</td><td>P6</td><td>WAIT_FOR_RAM</td><td>-</td><td>deferred — ram_used=448/512 MB</td></tr>
+<tr><td>27.000</td><td>CPU1</td><td>P1</td><td>FINISHED</td><td>-</td><td>t=27.00</td></tr>
+<tr><td>27.000</td><td>SYS</td><td>P1</td><td>RAM_FREED</td><td>-</td><td>process finished, freed 256MB</td></tr>
+<tr><td>27.000</td><td>CPU1</td><td>P2</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=10.00 slice=4.0</td></tr>
+<tr><td>28.000</td><td>CPU2</td><td>P3</td><td>FINISHED</td><td>-</td><td>t=28.00</td></tr>
+<tr><td>28.000</td><td>SYS</td><td>P3</td><td>RAM_FREED</td><td>-</td><td>process finished, freed 64MB</td></tr>
+<tr><td>28.000</td><td>CPU0</td><td>P0</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=4.00</td></tr>
+<tr><td>28.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>31.000</td><td>CPU1</td><td>P2</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=6.00</td></tr>
+<tr><td>31.000</td><td>CPU1</td><td>P2</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=6.00 slice=4.0</td></tr>
+<tr><td>32.000</td><td>CPU0</td><td>P0</td><td>SYSCALL_ISSUED</td><td>1.00</td><td>syscall #3</td></tr>
+<tr><td>32.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_START</td><td>1.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>33.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>33.000</td><td>SYS</td><td>P0</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 3</td></tr>
+<tr><td>33.000</td><td>CPU0</td><td>P0</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>35.000</td><td>CPU1</td><td>P2</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=2.00</td></tr>
+<tr><td>35.000</td><td>CPU1</td><td>P2</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=4.0</td></tr>
+<tr><td>35.000</td><td>SYS</td><td>P7</td><td>RELEASED</td><td>-</td><td>mem=128MB</td></tr>
+<tr><td>35.000</td><td>CPU2</td><td>P7</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=8.00 slice=4.0</td></tr>
+<tr><td>37.000</td><td>CPU0</td><td>P0</td><td>FINISHED</td><td>-</td><td>t=37.00</td></tr>
+<tr><td>37.000</td><td>SYS</td><td>P0</td><td>RAM_FREED</td><td>-</td><td>process finished, freed 128MB</td></tr>
+<tr><td>37.000</td><td>CPU1</td><td>P2</td><td>SYSCALL_ISSUED</td><td>2.00</td><td>syscall #1</td></tr>
+<tr><td>37.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_START</td><td>2.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>39.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>39.000</td><td>SYS</td><td>P2</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 1</td></tr>
+<tr><td>39.000</td><td>CPU1</td><td>P2</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=5.00 slice=4.0</td></tr>
+<tr><td>39.000</td><td>CPU2</td><td>P7</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=4.00</td></tr>
+<tr><td>39.000</td><td>CPU2</td><td>P7</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>40.000</td><td>SYS</td><td>SYS</td><td>SYS_PROC_RELEASED</td><td>-</td><td>period=20.0</td></tr>
+<tr><td>40.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_START</td><td>2.00</td><td>handling 0 syscall(s)</td></tr>
+<tr><td>42.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 0 syscall(s)</td></tr>
+<tr><td>43.000</td><td>CPU2</td><td>P7</td><td>SYSCALL_ISSUED</td><td>2.00</td><td>syscall #1</td></tr>
+<tr><td>43.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_START</td><td>2.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>43.000</td><td>CPU1</td><td>P2</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=1.00</td></tr>
+<tr><td>43.000</td><td>CPU1</td><td>P2</td><td>DISPATCH</td><td>1.00</td><td>burst_rem=1.00 slice=4.0</td></tr>
+<tr><td>44.000</td><td>CPU1</td><td>P2</td><td>SYSCALL_ISSUED</td><td>1.00</td><td>syscall #2</td></tr>
+<tr><td>45.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>45.000</td><td>SYS</td><td>P7</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 1</td></tr>
+<tr><td>45.000</td><td>CPU2</td><td>P7</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=8.00 slice=4.0</td></tr>
+<tr><td>45.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_START</td><td>1.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>46.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>46.000</td><td>SYS</td><td>P2</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 2</td></tr>
+<tr><td>46.000</td><td>CPU1</td><td>P2</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=5.00 slice=4.0</td></tr>
+<tr><td>49.000</td><td>CPU2</td><td>P7</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=4.00</td></tr>
+<tr><td>49.000</td><td>CPU2</td><td>P7</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>50.000</td><td>CPU1</td><td>P2</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=1.00</td></tr>
+<tr><td>50.000</td><td>CPU1</td><td>P2</td><td>DISPATCH</td><td>1.00</td><td>burst_rem=1.00 slice=4.0</td></tr>
+<tr><td>51.000</td><td>CPU1</td><td>P2</td><td>FINISHED</td><td>-</td><td>t=51.00</td></tr>
+<tr><td>51.000</td><td>SYS</td><td>P2</td><td>RAM_FREED</td><td>-</td><td>process finished, freed 200MB</td></tr>
+<tr><td>51.000</td><td>CPU0</td><td>P4</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=20.00 slice=4.0</td></tr>
+<tr><td>53.000</td><td>CPU2</td><td>P7</td><td>SYSCALL_ISSUED</td><td>2.00</td><td>syscall #2</td></tr>
+<tr><td>53.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_START</td><td>2.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>55.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>55.000</td><td>SYS</td><td>P7</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 2</td></tr>
+<tr><td>55.000</td><td>CPU2</td><td>P7</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=8.00 slice=4.0</td></tr>
+<tr><td>55.000</td><td>CPU0</td><td>P4</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=16.00</td></tr>
+<tr><td>55.000</td><td>CPU0</td><td>P4</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=16.00 slice=4.0</td></tr>
+<tr><td>59.000</td><td>CPU2</td><td>P7</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=4.00</td></tr>
+<tr><td>59.000</td><td>CPU2</td><td>P7</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>59.000</td><td>CPU0</td><td>P4</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=12.00</td></tr>
+<tr><td>59.000</td><td>CPU0</td><td>P4</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=12.00 slice=4.0</td></tr>
+<tr><td>60.000</td><td>SYS</td><td>SYS</td><td>SYS_PROC_RELEASED</td><td>-</td><td>period=20.0</td></tr>
+<tr><td>60.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_START</td><td>2.00</td><td>handling 0 syscall(s)</td></tr>
+<tr><td>62.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 0 syscall(s)</td></tr>
+<tr><td>63.000</td><td>CPU2</td><td>P7</td><td>FINISHED</td><td>-</td><td>t=63.00</td></tr>
+<tr><td>63.000</td><td>SYS</td><td>P7</td><td>RAM_FREED</td><td>-</td><td>process finished, freed 128MB</td></tr>
+<tr><td>63.000</td><td>CPU1</td><td>P5</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=4.0</td></tr>
+<tr><td>63.000</td><td>CPU0</td><td>P4</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=8.00</td></tr>
+<tr><td>63.000</td><td>CPU0</td><td>P4</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=8.00 slice=4.0</td></tr>
+<tr><td>65.000</td><td>CPU1</td><td>P5</td><td>SYSCALL_ISSUED</td><td>1.00</td><td>syscall #1</td></tr>
+<tr><td>65.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_START</td><td>1.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>66.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>66.000</td><td>SYS</td><td>P5</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 1</td></tr>
+<tr><td>66.000</td><td>CPU1</td><td>P5</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=4.0</td></tr>
+<tr><td>67.000</td><td>CPU0</td><td>P4</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=4.00</td></tr>
+<tr><td>67.000</td><td>CPU0</td><td>P4</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=4.00 slice=4.0</td></tr>
+<tr><td>68.000</td><td>CPU1</td><td>P5</td><td>SYSCALL_ISSUED</td><td>1.00</td><td>syscall #2</td></tr>
+<tr><td>68.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_START</td><td>1.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>69.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>69.000</td><td>SYS</td><td>P5</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 2</td></tr>
+<tr><td>69.000</td><td>CPU1</td><td>P5</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=4.0</td></tr>
+<tr><td>71.000</td><td>CPU0</td><td>P4</td><td>SYSCALL_ISSUED</td><td>5.00</td><td>syscall #1</td></tr>
+<tr><td>71.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_START</td><td>5.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>71.000</td><td>CPU1</td><td>P5</td><td>SYSCALL_ISSUED</td><td>1.00</td><td>syscall #3</td></tr>
+<tr><td>76.000</td><td>CPU0</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>76.000</td><td>SYS</td><td>P4</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 1</td></tr>
+<tr><td>76.000</td><td>CPU0</td><td>P4</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=10.00 slice=4.0</td></tr>
+<tr><td>76.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_START</td><td>1.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>77.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>77.000</td><td>SYS</td><td>P5</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 3</td></tr>
+<tr><td>77.000</td><td>CPU1</td><td>P5</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=4.0</td></tr>
+<tr><td>79.000</td><td>CPU1</td><td>P5</td><td>SYSCALL_ISSUED</td><td>1.00</td><td>syscall #4</td></tr>
+<tr><td>79.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_START</td><td>1.00</td><td>handling 1 syscall(s)</td></tr>
+<tr><td>80.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 1 syscall(s)</td></tr>
+<tr><td>80.000</td><td>SYS</td><td>P5</td><td>SYSCALL_COMPLETE</td><td>-</td><td>burst_index now 4</td></tr>
+<tr><td>80.000</td><td>CPU1</td><td>P5</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=4.0</td></tr>
+<tr><td>80.000</td><td>CPU0</td><td>P4</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=6.00</td></tr>
+<tr><td>80.000</td><td>CPU0</td><td>P4</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=6.00 slice=4.0</td></tr>
+<tr><td>80.000</td><td>SYS</td><td>SYS</td><td>SYS_PROC_RELEASED</td><td>-</td><td>period=20.0</td></tr>
+<tr><td>80.000</td><td>CPU2</td><td>SYS</td><td>SYS_PROC_START</td><td>2.00</td><td>handling 0 syscall(s)</td></tr>
+<tr><td>82.000</td><td>CPU2</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 0 syscall(s)</td></tr>
+<tr><td>82.000</td><td>CPU1</td><td>P5</td><td>FINISHED</td><td>-</td><td>t=82.00</td></tr>
+<tr><td>82.000</td><td>SYS</td><td>P5</td><td>RAM_FREED</td><td>-</td><td>process finished, freed 100MB</td></tr>
+<tr><td>84.000</td><td>CPU0</td><td>P4</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=2.00</td></tr>
+<tr><td>84.000</td><td>CPU0</td><td>P4</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=4.0</td></tr>
+<tr><td>86.000</td><td>CPU0</td><td>P4</td><td>FINISHED</td><td>-</td><td>t=86.00</td></tr>
+<tr><td>86.000</td><td>SYS</td><td>P4</td><td>RAM_FREED</td><td>-</td><td>process finished, freed 350MB</td></tr>
+<tr><td>86.000</td><td>CPU0</td><td>P6</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=30.00 slice=4.0</td></tr>
+<tr><td>90.000</td><td>CPU0</td><td>P6</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=26.00</td></tr>
+<tr><td>90.000</td><td>CPU0</td><td>P6</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=26.00 slice=4.0</td></tr>
+<tr><td>94.000</td><td>CPU0</td><td>P6</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=22.00</td></tr>
+<tr><td>94.000</td><td>CPU0</td><td>P6</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=22.00 slice=4.0</td></tr>
+<tr><td>98.000</td><td>CPU0</td><td>P6</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=18.00</td></tr>
+<tr><td>98.000</td><td>CPU0</td><td>P6</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=18.00 slice=4.0</td></tr>
+<tr><td>100.000</td><td>SYS</td><td>SYS</td><td>SYS_PROC_RELEASED</td><td>-</td><td>period=20.0</td></tr>
+<tr><td>100.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_START</td><td>2.00</td><td>handling 0 syscall(s)</td></tr>
+<tr><td>102.000</td><td>CPU1</td><td>SYS</td><td>SYS_PROC_END</td><td>-</td><td>completed 0 syscall(s)</td></tr>
+<tr><td>102.000</td><td>CPU0</td><td>P6</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=14.00</td></tr>
+<tr><td>102.000</td><td>CPU0</td><td>P6</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=14.00 slice=4.0</td></tr>
+<tr><td>106.000</td><td>CPU0</td><td>P6</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=10.00</td></tr>
+<tr><td>106.000</td><td>CPU0</td><td>P6</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=10.00 slice=4.0</td></tr>
+<tr><td>110.000</td><td>CPU0</td><td>P6</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=6.00</td></tr>
+<tr><td>110.000</td><td>CPU0</td><td>P6</td><td>DISPATCH</td><td>4.00</td><td>burst_rem=6.00 slice=4.0</td></tr>
+<tr><td>114.000</td><td>CPU0</td><td>P6</td><td>SLICE_EXPIRE</td><td>-</td><td>burst_rem=2.00</td></tr>
+<tr><td>114.000</td><td>CPU0</td><td>P6</td><td>DISPATCH</td><td>2.00</td><td>burst_rem=2.00 slice=4.0</td></tr>
+<tr><td>116.000</td><td>CPU0</td><td>P6</td><td>FINISHED</td><td>-</td><td>t=116.00</td></tr>
+<tr><td>116.000</td><td>SYS</td><td>P6</td><td>RAM_FREED</td><td>-</td><td>process finished, freed 256MB</td></tr></tbody>
+</table>
+</div>
+
+<footer>Round-Robin Scheduler Simulation &nbsp;|&nbsp; Software Quality</footer>
+
+<script>
+(function() {
+  // Gantt zoom
+  var ZOOMS = [100, 150, 200, 300, 400, 600];
+  var zIdx  = 0;
+  var svg   = document.querySelector('.gantt-wrapper svg');
+
+  function applyZoom() {
+    var z = ZOOMS[zIdx];
+    svg.style.width = z + '%';
+    document.getElementById('zoom-label').textContent = z + '%';
+    document.getElementById('zoom-out').disabled = (zIdx === 0);
+    document.getElementById('zoom-in').disabled  = (zIdx === ZOOMS.length - 1);
+  }
+
+  window.zoomGantt = function(dir) {
+    zIdx = Math.max(0, Math.min(ZOOMS.length - 1, zIdx + dir));
+    applyZoom();
+  };
+  window.resetGantt = function() {
+    zIdx = 0;
+    applyZoom();
+  };
+  applyZoom();
+
+  // Tooltip
+  var tip = document.getElementById('gantt-tip');
+  document.querySelectorAll('.gantt-bar').forEach(function(bar) {
+    bar.addEventListener('mousemove', function(e) {
+      tip.innerHTML =
+        '<div class="tip-title">' + bar.dataset.pid + ' &mdash; ' + bar.dataset.cat + '</div>' +
+        '<div class="tip-row">Start &nbsp;<span>' + bar.dataset.start + '</span></div>' +
+        '<div class="tip-row">End &nbsp;&nbsp;&nbsp;<span>' + bar.dataset.end + '</span></div>' +
+        '<div class="tip-row">Duration <span>' + bar.dataset.dur + '</span></div>';
+      var x = e.clientX + 16, y = e.clientY - 12;
+      if (x + 190 > window.innerWidth) x = e.clientX - 200;
+      tip.style.left = x + 'px';
+      tip.style.top  = y + 'px';
+      tip.style.display = 'block';
+    });
+    bar.addEventListener('mouseleave', function() {
+      tip.style.display = 'none';
+    });
+  });
+})();
+</script>
+</body>
+</html>
