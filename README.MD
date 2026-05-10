@@ -269,10 +269,9 @@ Apoi, pentru a evalua proiectul, se rulează următoarele comenzi în ordine:
 ```bash
 python -m coverage run -m unittest discover
 ```
-*(Această comandă va rula toate cele 32 de teste în liniște și va strânge metadatele de parcurgere într-un fișier local ascuns).* 
+*(Această comandă va rula toate cele 46 de teste în liniște și va strânge metadatele de parcurgere într-un fișier local ascuns).* 
 
 **2. Afișarea raportului în consolă:**
 ```bash
 python -m coverage report -m
 ```
-*(Va afișa un tabel detaliat cu procentajul de acoperire pentru fiecare fișier: `visualiser.py` - 100%, `parser.py` - 94%, `simulator.py` - 81%. Media totală pe proiect este de **90%**, un scor de excelență pentru testare unitară perfect izolată, fără teste de integrare).*

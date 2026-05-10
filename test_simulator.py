@@ -318,5 +318,217 @@ class TestSimulator(unittest.TestCase):
         self.assertIn(0, self.sim.in_ram)
         self.sim._enqueue_ready.assert_called_once_with(self.p0)
 
+    def test_gantt_start(self):
+        self.sim.time = 5.0
+        self.sim._gantt_start(0, 10, "user")
+        self.assertIn(0, self.sim._running_start)
+        self.assertEqual(self.sim._running_start[0], (5.0, 10, "user"))
+
+    def test_gantt_end(self):
+        self.sim.time = 10.0
+        self.sim._running_start[0] = (5.0, 10, "user")
+        self.sim._gantt_end(0)
+        self.assertNotIn(0, self.sim._running_start)
+        self.assertEqual(len(self.sim.gantt), 1)
+        self.assertEqual(self.sim.gantt[0], (5.0, 10.0, 0, 10, "user"))
+
+    def test_gantt_end_invalid_start(self):
+        # Time didn't advance
+        self.sim.time = 5.0
+        self.sim._running_start[0] = (5.0, 10, "user")
+        self.sim._gantt_end(0)
+        self.assertEqual(len(self.sim.gantt), 0)
+
+    def test_try_admit_waiting_empty(self):
+        self.sim.waiting_for_ram.clear()
+        self.sim._try_admit_waiting()
+
+    def test_try_admit_waiting_fits(self):
+        self.sim.waiting_for_ram.append(0)
+        self.sim.ram_used = 0
+        self.p0.memory = 100
+        
+        self.sim._enqueue_ready = MagicMock()
+        self.sim._schedule = MagicMock()
+        
+        self.sim._try_admit_waiting()
+        
+        self.assertEqual(len(self.sim.waiting_for_ram), 0)
+        self.assertTrue(self.p0.in_memory)
+        self.assertEqual(self.sim.ram_used, 100)
+        self.assertIn(0, self.sim.in_ram)
+        self.sim._enqueue_ready.assert_called_once_with(self.p0)
+        self.sim._schedule.assert_called_once()
+
+    def test_try_admit_waiting_needs_evict_fits(self):
+        self.sim.waiting_for_ram.append(0)
+        self.sim.ram_used = 200
+        self.p0.memory = 100
+        
+        self.sim._lru_evict_for = MagicMock(return_value=[1]) # Evicted P1
+        self.sim._ram_available = MagicMock(side_effect=[False, True]) # Fails first, fits after evict
+        
+        self.sim._enqueue_ready = MagicMock()
+        self.sim._schedule = MagicMock()
+        
+        self.sim._try_admit_waiting()
+        
+        self.assertEqual(len(self.sim.waiting_for_ram), 0)
+        self.assertTrue(self.p0.in_memory)
+        self.sim._enqueue_ready.assert_called_once()
+        self.sim._schedule.assert_called_once()
+
+    def test_try_admit_waiting_needs_evict_queued(self):
+        self.sim.waiting_for_ram.append(0)
+        self.sim.ram_used = 200
+        self.p0.memory = 100
+        self.p0.state = simulator.STATE_READY
+        
+        self.sim._lru_evict_for = MagicMock(return_value=[1]) # Evicted P1
+        self.sim._ram_available = MagicMock(side_effect=[False, False]) # Fails even after evict trigger
+        
+        self.sim._try_admit_waiting()
+        
+        self.assertEqual(len(self.sim.waiting_for_ram), 0)
+        self.assertEqual(self.p0.state, simulator.STATE_ON_DISK)
+        self.assertEqual(len(self.sim.disk_queue), 1)
+        self.assertEqual(self.sim.disk_queue[0], (0, "load", 2.0))
+
+    def test_enqueue_ready_not_in_mem(self):
+        self.p0.in_memory = False
+        self.sim._admit_process = MagicMock()
+        self.sim._enqueue_ready(self.p0)
+        self.sim._admit_process.assert_called_once_with(0)
+
+    def test_enqueue_ready_in_mem(self):
+        self.p0.in_memory = True
+        self.sim.in_ram = [0, 1]
+        self.sim.time = 50.0
+        self.sim._enqueue_ready(self.p0)
+        self.assertEqual(self.p0.state, simulator.STATE_READY)
+        self.assertEqual(self.p0.last_used_time, 50.0)
+        self.assertEqual(self.sim.in_ram, [1, 0])
+        self.assertIn(self.p0, self.sim.ready_queue)
+
+    def test_pump_disk_empty(self):
+        self.sim.disk_busy = False
+        self.sim._pump_disk()
+
+    @patch('simulator.Event')
+    def test_pump_disk_starts_transfer(self, MockEvent):
+        self.sim.disk_busy = False
+        self.sim.disk_queue.append((0, "load", 5.0))
+        self.sim.time = 10.0
+        self.sim._log = MagicMock()
+        self.sim._gantt_start = MagicMock()
+        self.sim.push = MagicMock()
+        
+        self.sim._pump_disk()
+        
+        self.assertTrue(self.sim.disk_busy)
+        self.assertEqual(len(self.sim.disk_queue), 0)
+        self.assertEqual(self.p0.state, simulator.STATE_LOADING)
+        self.sim._gantt_start.assert_called_once_with("DISK", 0, "disk_load")
+        self.sim.push.assert_called_once()
+
+    def test_schedule_no_free(self):
+        self.sim._free_processors = MagicMock(return_value=[])
+        self.sim.ready_queue.append(self.p0)
+        self.sim._schedule()
+        self.assertIn(self.p0, self.sim.ready_queue)
+
+    def test_schedule_skips_stale(self):
+        self.sim._free_processors = MagicMock(return_value=[self.cpu0])
+        self.cpu0.process = None
+        self.p0.state = simulator.STATE_RUNNING
+        self.sim.ready_queue.append(self.p0)
+        self.sim._schedule()
+        self.assertEqual(len(self.sim.ready_queue), 0)
+        self.assertIsNone(self.cpu0.process)
+
+    def test_schedule_assigns(self):
+        self.sim._free_processors = MagicMock(return_value=[self.cpu0])
+        self.p0.state = simulator.STATE_READY
+        self.sim.ready_queue.append(self.p0)
+        self.sim._preferred_cpu = MagicMock(return_value=self.cpu0)
+        self.sim._dispatch = MagicMock()
+        
+        self.sim._schedule()
+        
+        self.assertEqual(len(self.sim.ready_queue), 0)
+        self.sim._dispatch.assert_called_once_with(self.p0, self.cpu0)
+
+    @patch('simulator.Event')
+    def test_dispatch_burst_fits(self, MockEvent):
+        self.cpu0.is_free.return_value = True
+        self.p0.state = simulator.STATE_READY
+        self.p0.burst_remaining = 3.0
+        self.sim.params["time_slice"] = 4.0
+        
+        self.sim._log = MagicMock()
+        self.sim._gantt_start = MagicMock()
+        self.sim.push = MagicMock()
+        
+        self.sim._dispatch(self.p0, self.cpu0)
+        
+        self.assertEqual(self.p0.state, simulator.STATE_RUNNING)
+        self.assertEqual(self.p0.last_processor, 0)
+        self.assertEqual(self.cpu0.process, self.p0)
+        self.assertEqual(self.p0.slice_remaining, 3.0)
+        
+        MockEvent.assert_called_once_with(self.sim.time + 3.0, simulator.EV_PROCESS_FINISH, {"pid": 0, "cpu_id": 0})
+        self.sim.push.assert_called_once()
+
+    @patch('simulator.Event')
+    def test_dispatch_slice_expires(self, MockEvent):
+        self.cpu0.is_free.return_value = True
+        self.p0.state = simulator.STATE_READY
+        self.p0.burst_remaining = 10.0
+        self.sim.params["time_slice"] = 4.0
+        
+        self.sim._log = MagicMock()
+        self.sim._gantt_start = MagicMock()
+        self.sim.push = MagicMock()
+        
+        self.sim._dispatch(self.p0, self.cpu0)
+        
+        self.assertEqual(self.p0.slice_remaining, 4.0)
+        MockEvent.assert_called_once_with(self.sim.time + 4.0, simulator.EV_SLICE_EXPIRE, {"pid": 0, "cpu_id": 0})
+
+    def test_preempt(self):
+        self.cpu0.process = self.p0
+        self.p0.slice_remaining = 2.0
+        self.sim.time = 10.0
+        self.sim.params["time_slice"] = 4.0
+        
+        self.sim._gantt_end = MagicMock()
+        
+        process = self.sim._preempt(self.cpu0)
+        
+        self.assertEqual(process, self.p0)
+        self.assertIsNone(self.cpu0.process)
+        self.assertEqual(self.p0.state, simulator.STATE_READY)
+        self.sim._gantt_end.assert_called_once_with(0)
+
+    def test_run_main_loop(self):
+        self.sim._schedule_initial_events = MagicMock()
+        self.sim._events = [1, 2] # Force loop execution
+        
+        ev = MagicMock(spec=Event)
+        ev.time = 5.0
+        ev.etype = "UNKNOWN_EVENT"
+        
+        self.sim.pop = MagicMock(side_effect=[ev, IndexError()])
+        
+        self.p0.state = simulator.STATE_FINISHED
+        self.p1.state = simulator.STATE_FINISHED
+        
+        log, gantt = self.sim.run()
+        
+        self.assertEqual(self.sim.time, 5.0)
+        self.assertEqual(log, self.sim.log)
+        self.assertEqual(gantt, self.sim.gantt)
+        self.sim._schedule_initial_events.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main()
