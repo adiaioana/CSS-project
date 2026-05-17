@@ -214,6 +214,57 @@ class Simulator:
             if self.time > start:
                 self.gantt.append((start, self.time, cpu_id, pid, cat))
 
+    def _check_invariants(self):
+        # ram_used never exceeds capacity
+        assert 0 <= self.ram_used <= self.params["ram_size"], \
+            f"INV: ram_used={self.ram_used} out of [0, {self.params['ram_size']}]"
+
+        # sum of memory of in_ram pids equals ram_used
+        in_ram_total = sum(self.processes[pid].memory for pid in self.in_ram)
+        assert in_ram_total == self.ram_used, \
+            f"INV: sum(in_ram memory)={in_ram_total} != ram_used={self.ram_used}"
+
+        # in_ram has no duplicates
+        assert len(self.in_ram) == len(set(self.in_ram)), \
+            f"INV: duplicate pids in in_ram: {self.in_ram}"
+
+        # every pid marked in_memory is in in_ram, and vice versa
+        for p in self.processes:
+            assert p.in_memory == (p.pid in self.in_ram), \
+                f"INV: P{p.pid}.in_memory={p.in_memory} but in_ram membership={p.pid in self.in_ram}"
+
+        # every CPU holds at most one process; if it holds one,
+        # that process is RUNNING (or it's the SYS sentinel).
+        for cpu in self.processors:
+            if cpu.process is not None and cpu.process != "SYS":
+                assert cpu.process.state == STATE_RUNNING, \
+                    f"INV: CPU{cpu.cpu_id} holds P{cpu.process.pid} but state={cpu.process.state}"
+
+        # a process is on at most one CPU
+        running_pids = [cpu.process.pid for cpu in self.processors
+                        if cpu.process is not None and cpu.process != "SYS"]
+        assert len(running_pids) == len(set(running_pids)), \
+            f"INV: same pid running on multiple CPUs: {running_pids}"
+
+        # a RUNNING process must be in_memory (cannot run from disk)
+        for p in self.processes:
+            if p.state == STATE_RUNNING:
+                assert p.in_memory, f"INV: P{p.pid} RUNNING but not in_memory"
+
+        # waiting_for_ram pids must NOT be in_memory
+        for pid in self.waiting_for_ram:
+            assert not self.processes[pid].in_memory, \
+                f"INV: P{pid} in waiting_for_ram but already in_memory"
+
+        # sys_proc_running implies exactly one CPU holds the SYS sentinel
+        sys_cpus = [cpu for cpu in self.processors if cpu.process == "SYS"]
+        if self.sys_proc_running:
+            assert len(sys_cpus) == 1, \
+                f"INV: sys_proc_running but {len(sys_cpus)} CPUs hold SYS"
+        else:
+            assert len(sys_cpus) == 0, \
+                f"INV: !sys_proc_running but {len(sys_cpus)} CPUs hold SYS"
+
     # ------------------------------------------------------------------
     # Initialisation
     # ------------------------------------------------------------------
@@ -240,11 +291,20 @@ class Simulator:
     # ------------------------------------------------------------------
 
     def _ram_available(self, needed):
+        # PRE: 'needed' must be a non-negative number of MB
+        assert needed >= 0, f"PRE: _ram_available needed={needed} < 0"
         return (self.ram_used + needed) <= self.params["ram_size"]
 
     def _release_ram(self, pid):
         """Free the RAM held by a finished process and update LRU list."""
+        # PRE: pid is a valid process id
+        assert 0 <= pid < len(self.processes), f"PRE: _release_ram invalid pid={pid}"
         p = self._get_proc(pid)
+        # PRE: a released process must already be FINISHED
+        assert p.state == STATE_FINISHED, \
+            f"PRE: _release_ram P{pid} state={p.state}, expected FINISHED"
+        ram_before = self.ram_used
+        was_in_memory = p.in_memory
         if p.in_memory:
             p.in_memory = False
             self.ram_used -= p.memory
@@ -252,6 +312,16 @@ class Simulator:
                 self.in_ram.remove(pid)
             self._log(None, pid, "RAM_FREED",
                       detail=f"process finished, freed {p.memory}MB")
+        # POST: the process is no longer counted as in RAM
+        assert not p.in_memory, f"POST: P{pid} still flagged in_memory"
+        assert pid not in self.in_ram, f"POST: P{pid} still in in_ram list"
+        # POST: ram_used is decreased by exactly p.memory iff the process was in RAM
+        if was_in_memory:
+            assert self.ram_used == ram_before - p.memory, \
+                f"POST: ram_used delta wrong: {ram_before}->{self.ram_used} for {p.memory}MB"
+        else:
+            assert self.ram_used == ram_before, \
+                f"POST: ram_used changed without releasing memory: {ram_before}->{self.ram_used}"
 
     def _lru_evict_for(self, pid):
         """
@@ -259,10 +329,28 @@ class Simulator:
         space for process pid. Returns list of evicted pids.
         Pumps the disk queue after queuing all saves.
         """
+        # PRE: pid is a valid id and the process is not already in RAM
+        assert 0 <= pid < len(self.processes), f"PRE: _lru_evict_for invalid pid={pid}"
         p = self._get_proc(pid)
+        assert not p.in_memory, \
+            f"PRE: _lru_evict_for P{pid} is already in_memory; eviction would self-evict"
+        # PRE: required memory must fit in total RAM at all
+        assert p.memory <= self.params["ram_size"], \
+            f"PRE: P{pid} requires {p.memory}MB > total RAM {self.params['ram_size']}MB"
+
         evicted = []
+        ram_used_at_loop_start = self.ram_used
         # Only evict processes that are not currently running or loading
         while not self._ram_available(p.memory):
+            assert self.ram_used <= ram_used_at_loop_start, \
+                "LOOP INV: ram_used must be non-increasing during eviction"
+            for ev_pid in evicted:
+                ev_proc = self._get_proc(ev_pid)
+                assert ev_proc.state == STATE_SAVING, \
+                    f"LOOP INV: previously evicted P{ev_pid} state={ev_proc.state} (expected SAVING)"
+                assert ev_pid not in self.in_ram, \
+                    f"LOOP INV: previously evicted P{ev_pid} still in in_ram"
+
             # Find LRU candidate: oldest in in_ram that is evictable
             candidate_pid = None
             for candidate in self.in_ram:
@@ -276,6 +364,12 @@ class Simulator:
             if candidate_pid is None:
                 break
             cp = self._get_proc(candidate_pid)
+            # PRE for the evict step: candidate is evictable
+            assert cp.state in (STATE_READY, STATE_FINISHED), \
+                f"PRE(evict step): chose non-evictable P{candidate_pid} state={cp.state}"
+            assert cp.in_memory, \
+                f"PRE(evict step): candidate P{candidate_pid} is not in_memory"
+            ram_before_step = self.ram_used
             self.in_ram.remove(candidate_pid)
             self.ram_used -= cp.memory
             cp.in_memory = False
@@ -290,25 +384,62 @@ class Simulator:
             self._log(None, candidate_pid, "EVICT→DISK", transfer_time,
                       f"LRU evict, size={cp.memory}MB")
             self.disk_queue.append((candidate_pid, "save", transfer_time))
+            # POST(step): the evicted process is no longer counted in RAM
+            assert self.ram_used == ram_before_step - cp.memory, \
+                f"POST(evict step): ram_used delta wrong for P{candidate_pid}"
+            assert candidate_pid not in self.in_ram, \
+                f"POST(evict step): P{candidate_pid} still in in_ram after eviction"
+            assert cp.state == STATE_SAVING, \
+                f"POST(evict step): P{candidate_pid} state={cp.state} (expected SAVING)"
         # Pump disk so saves (and subsequent loads) begin
         self._pump_disk()
+
+        # POST: every returned pid was actually evicted and is now in SAVING
+        for ev_pid in evicted:
+            assert self._get_proc(ev_pid).state == STATE_SAVING, \
+                f"POST: returned P{ev_pid} not in SAVING state"
+            assert ev_pid not in self.in_ram, \
+                f"POST: returned P{ev_pid} still in in_ram"
+        # POST: either we made room, or all in_ram occupants are non-evictable
+        if not self._ram_available(p.memory):
+            for occ in self.in_ram:
+                if occ == pid:
+                    continue
+                occ_state = self._get_proc(occ).state
+                assert occ_state not in (STATE_READY, STATE_FINISHED), \
+                    f"POST: failed to fit P{pid} but P{occ} state={occ_state} was evictable"
         return evicted
 
     def _load_process(self, pid):
         """Enqueue a disk→RAM transfer for pid (after any pending saves finish)."""
+        # PRE: pid valid and process not currently in RAM
+        assert 0 <= pid < len(self.processes), f"PRE: _load_process invalid pid={pid}"
         p = self._get_proc(pid)
+        assert not p.in_memory, f"PRE: _load_process P{pid} already in_memory"
         transfer_time = p.memory / self.params["disk_transfer_rate"]
+        # PRE: transfer time must be a positive finite number
+        assert transfer_time > 0, f"PRE: non-positive transfer_time={transfer_time}"
         p.state = STATE_LOADING
         self._log(None, pid, "LOAD←DISK_QUEUED", transfer_time,
                   f"size={p.memory}MB, rate={self.params['disk_transfer_rate']}MB/t")
         self.disk_queue.append((pid, "load", transfer_time))
         self._pump_disk()
+        # POST: a load entry now exists in disk_queue or is already in flight
+        # (it may have been popped by _pump_disk if the disk was free).
+        in_queue = any(e[0] == pid and e[1] == "load" for e in self.disk_queue)
+        in_flight = self.disk_busy and p.state == STATE_LOADING
+        assert in_queue or in_flight, \
+            f"POST: load for P{pid} neither queued nor in flight"
 
     def _pump_disk(self):
         """Start the next disk transfer if disk is free."""
         if self.disk_busy or not self.disk_queue:
             return
         pid, direction, duration = self.disk_queue.popleft()
+        # PRE on the popped item: direction must be valid and duration positive
+        assert direction in ("save", "load"), \
+            f"PRE(popped): unknown direction={direction}"
+        assert duration > 0, f"PRE(popped): non-positive duration={duration}"
         self.disk_busy = True
         self.push(Event(self.time + duration, EV_DISK_TRANSFER_END,
                         {"pid": pid, "direction": direction}))
@@ -319,6 +450,8 @@ class Simulator:
             self._log(None, pid, "LOAD←DISK_START", duration,
                       f"size={p.memory}MB")
         self._gantt_start("DISK", pid, cat)
+        # POST: the disk is now busy and a DISK_TRANSFER_END event is queued
+        assert self.disk_busy, "POST: disk not flagged busy after pumping"
 
     def _try_admit_waiting(self):
         """
@@ -326,10 +459,18 @@ class Simulator:
         We admit at most one process per call to avoid immediately evicting
         a process that was just admitted.
         """
+        # PRE: waiting_for_ram contains only on-disk processes
+        for q_pid in self.waiting_for_ram:
+            assert not self.processes[q_pid].in_memory, \
+                f"PRE: P{q_pid} in waiting_for_ram is already in_memory"
+
         if not self.waiting_for_ram:
             return
+        waiting_len_before = len(self.waiting_for_ram)
         pid = self.waiting_for_ram[0]
         p = self._get_proc(pid)
+        # PRE: head of waiting_for_ram is a real, on-disk process
+        assert not p.in_memory, f"PRE: head P{pid} of waiting_for_ram already in_memory"
 
         if self._ram_available(p.memory):
             self.waiting_for_ram.popleft()
@@ -338,6 +479,10 @@ class Simulator:
             self.in_ram.append(pid)
             self._enqueue_ready(p)
             self._schedule()
+            # POST: process was admitted directly, queue shrunk by exactly one
+            assert p.in_memory, f"POST: direct admit failed for P{pid}"
+            assert len(self.waiting_for_ram) == waiting_len_before - 1, \
+                "POST: waiting_for_ram did not shrink by exactly one"
             return
 
         evicted = self._lru_evict_for(pid)
@@ -348,6 +493,8 @@ class Simulator:
             self.in_ram.append(pid)
             self._enqueue_ready(p)
             self._schedule()
+            # POST: same as direct admit but possibly with prior eviction
+            assert p.in_memory, f"POST: post-eviction admit failed for P{pid}"
         elif evicted:
             # Saves are queued; queue load to follow after saves complete
             self.waiting_for_ram.popleft()
@@ -355,6 +502,18 @@ class Simulator:
             self.disk_queue.append(
                 (pid, "load", p.memory / self.params["disk_transfer_rate"]))
             # _lru_evict_for already called _pump_disk
+            # POST: load is queued and process moved out of waiting_for_ram
+            assert pid not in self.waiting_for_ram, \
+                f"POST: P{pid} still in waiting_for_ram after queuing load"
+            assert any(e[0] == pid and e[1] == "load" for e in self.disk_queue) \
+                or (self.disk_busy and p.state == STATE_LOADING), \
+                f"POST: no pending load for P{pid} after evict-and-queue"
+        else:
+            # POST(no-progress branch): pid is still at the head, queue unchanged
+            assert len(self.waiting_for_ram) == waiting_len_before, \
+                "POST: waiting_for_ram changed despite no admission"
+            assert self.waiting_for_ram[0] == pid, \
+                "POST: head of waiting_for_ram changed unexpectedly"
         # else: still can't fit — leave in waiting_for_ram, retry next event
 
     # ------------------------------------------------------------------
@@ -380,8 +539,19 @@ class Simulator:
 
     def _dispatch(self, process, cpu):
         """Put process onto cpu and set up the appropriate expiry event."""
-        assert cpu.is_free(), f"CPU{cpu.cpu_id} is not free"
-        assert process.state == STATE_READY, f"P{process.pid} not READY (state={process.state})"
+        # PRE: target CPU must be free
+        assert cpu.is_free(), f"PRE: CPU{cpu.cpu_id} is not free"
+        # PRE: dispatched process must be READY
+        assert process.state == STATE_READY, \
+            f"PRE: P{process.pid} not READY (state={process.state})"
+        # PRE: cannot dispatch from disk (RUNNING needs in_memory)
+        assert process.in_memory, \
+            f"PRE: P{process.pid} not in_memory; cannot dispatch from disk"
+        # PRE: there is at least one burst left to run
+        assert process.burst_remaining > 0, \
+            f"PRE: P{process.pid} burst_remaining={process.burst_remaining} <= 0"
+        assert process.burst_index < len(process.bursts), \
+            f"PRE: P{process.pid} burst_index out of range"
 
         process.state = STATE_RUNNING
         process.last_processor = cpu.cpu_id
@@ -424,6 +594,7 @@ class Simulator:
         """
         free = self._free_processors()
         while free and self.ready_queue:
+            free_count_before = len(free)
             process = self.ready_queue.popleft()
             if process.state != STATE_READY:
                 # Stale entry (process state changed); skip
@@ -434,13 +605,34 @@ class Simulator:
                 self.ready_queue.appendleft(process)
                 break
             free = [c for c in free if c != cpu]
+            # LOOP INV: free shrinks by exactly one per successful dispatch
+            assert len(free) == free_count_before - 1, \
+                "LOOP INV: free CPU set did not shrink by 1 after picking a CPU"
             self._dispatch(process, cpu)
+            # LOOP INV: dispatched process is now RUNNING on that CPU
+            assert process.state == STATE_RUNNING, \
+                f"LOOP INV: P{process.pid} not RUNNING after dispatch"
+            assert cpu.process is process, \
+                f"LOOP INV: CPU{cpu.cpu_id} does not hold dispatched P{process.pid}"
+        # POST: no free CPU has a READY process waiting in ready_queue
+        if self._free_processors() and self.ready_queue:
+            head = self.ready_queue[0]
+            assert head.state != STATE_READY \
+                or self._preferred_cpu(head) is None, \
+                "POST: free CPU exists but ready_queue head is dispatchable"
 
     def _enqueue_ready(self, process):
         """
         Mark process as READY and add to ready queue.
         If process is not in memory, trigger load via _admit_process instead.
         """
+        # PRE: process is a real process object owned by this simulator
+        assert 0 <= process.pid < len(self.processes), \
+            f"PRE: _enqueue_ready invalid pid={process.pid}"
+        # PRE: a finished process should never be enqueued as READY
+        assert process.state != STATE_FINISHED, \
+            f"PRE: _enqueue_ready called on FINISHED P{process.pid}"
+
         if not process.in_memory:
             self._admit_process(process.pid)
             return
@@ -451,6 +643,15 @@ class Simulator:
             self.in_ram.remove(process.pid)
         self.in_ram.append(process.pid)
         self.ready_queue.append(process)
+        # POST: process is READY, in_ram (MRU position), and queued
+        assert process.state == STATE_READY, \
+            f"POST: P{process.pid} state={process.state} (expected READY)"
+        assert process.pid in self.in_ram, \
+            f"POST: P{process.pid} not in in_ram after enqueue"
+        assert self.in_ram[-1] == process.pid, \
+            f"POST: P{process.pid} not at MRU end of in_ram"
+        assert process in self.ready_queue, \
+            f"POST: P{process.pid} not in ready_queue"
 
     # ------------------------------------------------------------------
     # System process
@@ -501,7 +702,15 @@ class Simulator:
           3. No eviction possible (all in-RAM are RUNNING/LOADING) ->
              defer to waiting_for_ram; retry on next RAM-freeing event.
         """
+        # PRE: pid valid
+        assert 0 <= pid < len(self.processes), f"PRE: _admit_process invalid pid={pid}"
         p = self._get_proc(pid)
+        # PRE: a finished process must never be re-admitted
+        assert p.state != STATE_FINISHED, \
+            f"PRE: _admit_process called on FINISHED P{pid}"
+        # PRE: process memory must fit total RAM
+        assert p.memory <= self.params["ram_size"], \
+            f"PRE: P{pid} memory {p.memory}MB exceeds total RAM {self.params['ram_size']}MB"
         if p.in_memory:
             return
 
@@ -683,11 +892,32 @@ class Simulator:
     # ------------------------------------------------------------------
 
     def run(self):
+        # PRE: simulator state is clean — no time has passed and no events pumped
+        assert self.time == 0.0, f"PRE: run() called with time={self.time} (expected 0.0)"
+        assert len(self._events) == 0, "PRE: run() called with non-empty event queue"
+        # PRE: every process starts in NOT_ARRIVED
+        for p in self.processes:
+            assert p.state == STATE_NOT_ARRIVED, \
+                f"PRE: P{p.pid} starts in state={p.state} (expected NOT_ARRIVED)"
+        # PRE: validating parameters
+        assert self.params["num_processors"] >= 1, "PRE: need at least 1 CPU"
+        assert self.params["ram_size"] > 0, "PRE: ram_size must be positive"
+        assert self.params["time_slice"] > 0, "PRE: time_slice must be positive"
+        assert self.params["disk_transfer_rate"] > 0, \
+            "PRE: disk_transfer_rate must be positive"
+
         self._schedule_initial_events()
+        self._check_invariants()
 
         while self._events:
             ev = self.pop()
+            # INV: clock is monotonically non-decreasing
+            assert ev.time >= self.time, \
+                f"INV: event time {ev.time} < current time {self.time}"
             self.time = ev.time
+
+            # Class invariant must hold on entry to every handler
+            self._check_invariants()
 
             if ev.etype == EV_PROCESS_RELEASE:
                 self._handle_process_release(ev)
@@ -704,8 +934,23 @@ class Simulator:
             elif ev.etype == EV_DISK_TRANSFER_END:
                 self._handle_disk_transfer_end(ev)
 
+            self._check_invariants()
+
             # Early exit: all processes finished
             if all(p.state == STATE_FINISHED for p in self.processes):
                 break
+
+        # POST: simulation either finished all processes or exhausted events
+        finished = sum(1 for p in self.processes if p.state == STATE_FINISHED)
+        assert finished == len(self.processes) or len(self._events) == 0, \
+            f"POST: stopped with {finished}/{len(self.processes)} finished " \
+            f"and {len(self._events)} events still queued"
+        # POST: nothing is left running on a CPU
+        for cpu in self.processors:
+            assert cpu.is_free() or cpu.process == "SYS", \
+                f"POST: CPU{cpu.cpu_id} still holds {cpu.process} after run()"
+        # POST: log/gantt are well-formed (every gantt interval has end > start)
+        for (start, end, _cpu, _pid, _cat) in self.gantt:
+            assert end > start, f"POST: gantt interval [{start}, {end}] not strictly increasing"
 
         return self.log, self.gantt

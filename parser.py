@@ -76,23 +76,56 @@ def parse_input_file(path):
         "disk_transfer_rate": float(raw_params["disk_transfer_rate"]),
     }
 
+    # POST(params): every value is positive
+    assert params["num_processors"] >= 1, \
+        f"POST: num_processors={params['num_processors']} must be >= 1"
+    assert params["ram_size"] > 0, \
+        f"POST: ram_size={params['ram_size']} must be positive"
+    assert params["time_slice"] > 0, \
+        f"POST: time_slice={params['time_slice']} must be positive"
+    assert params["sys_proc_period"] > 0, \
+        f"POST: sys_proc_period={params['sys_proc_period']} must be positive"
+    assert params["sys_proc_duration"] > 0, \
+        f"POST: sys_proc_duration={params['sys_proc_duration']} must be positive"
+    assert params["disk_transfer_rate"] > 0, \
+        f"POST: disk_transfer_rate={params['disk_transfer_rate']} must be positive"
+
     # Parse processes
     processes = []
     for pid, line in enumerate(process_lines):
         tokens = re.split(r'\s+', line)
-        assert len(tokens) >= 3, f"Process line too short: {line!r}"
+        # PRE(per-line): a process line carries at least release/memory/burst0
+        assert len(tokens) >= 3, f"PRE: Process line too short: {line!r}"
         release_time = float(tokens[0])
         memory       = int(tokens[1])
         sequence     = [float(x) for x in tokens[2:]]
 
+        # PRE(per-line): release_time non-negative, memory positive
+        assert release_time >= 0, f"PRE: P{pid} release_time={release_time} < 0"
+        assert memory > 0, f"PRE: P{pid} memory={memory} must be positive"
+
         # sequence: b0 [s0 b1 [s1 b2 ...]]
         assert len(sequence) % 2 == 1, \
-            f"Process {pid}: sequence must be odd length (bursts interleaved with syscalls). Got: {sequence}"
+            f"PRE: Process {pid}: sequence must be odd length (bursts interleaved with syscalls). Got: {sequence}"
 
         bursts = sequence[0::2]       # indices 0, 2, 4, ...
         syscalls = sequence[1::2]     # indices 1, 3, 5, ...
 
+        # POST(per-process): bursts and syscalls satisfy the structural rule
+        # len(bursts) == len(syscalls) + 1, and every duration is positive
+        assert len(bursts) == len(syscalls) + 1, \
+            f"POST: P{pid} len(bursts)={len(bursts)}, len(syscalls)={len(syscalls)} (must differ by 1)"
+        for i, b in enumerate(bursts):
+            assert b > 0, f"POST: P{pid} burst[{i}]={b} must be positive"
+        for i, s in enumerate(syscalls):
+            assert s > 0, f"POST: P{pid} syscall[{i}]={s} must be positive"
+
         processes.append(Process(pid, release_time, memory, bursts, syscalls))
+
+    # POST(global): every process fits in total RAM
+    for proc in processes:
+        assert proc.memory <= params["ram_size"], \
+            f"POST: P{proc.pid} requires {proc.memory}MB but ram_size={params['ram_size']}MB"
 
     return params, processes
 
